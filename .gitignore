@@ -1,0 +1,19 @@
+# Secret Keys
+.env
+
+# WhatsApp Sessions (Don't push these!)
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Dependencies
+node_modules/
+admin-dashboard/node_modules/
+
+# Logs & Temp files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+
+# Build folders
+admin-dashboard/dist/
