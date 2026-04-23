@@ -13,7 +13,19 @@ export const whatsappClient = new Client({
 });
 
 whatsappClient.on('qr', (qr) => {
-    console.log('Scan this QR code to log the bot in:');
+    console.log('\n======================================================');
+    console.log('⚠️ TERMINAL QR DISTORTED? USE THE RAW STRING BELOW ⚠️');
+    console.log('1. Copy the long text string below.');
+    console.log('2. Go to https://www.qr-code-generator.com/');
+    console.log('3. Select the "Text" option and paste the string.');
+    console.log('4. Scan the QR code it generates on your screen.');
+    console.log('======================================================\n');
+    
+    console.log('--- RAW QR STRING START ---');
+    console.log(qr);
+    console.log('--- RAW QR STRING END ---\n');
+
+    // We will still try to print the graphical one just in case Render cooperates
     qrcode.generate(qr, { small: true });
 });
 
