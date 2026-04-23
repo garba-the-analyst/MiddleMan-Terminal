@@ -18,9 +18,6 @@ app.get('/', (req, res) => {
     res.send("MiddleMan Bot is Alive!");
 });
 
-app.listen(PORT, () => {
-    console.log(`Heartbeat server running on port ${PORT}`);
-});
 
 // --- ADMIN DASHBOARD API ROUTES ---
 
@@ -93,5 +90,5 @@ app.post('/api/admin/giftcards/approve', async (req, res) => {
 whatsappClient.initialize();
 
 app.listen(PORT, () => {
-    console.log(`🚀 MiddleMan Server & Admin API running on port ${PORT}`);
+    console.log(`MiddleMan Server & Heartbeat running on port ${PORT}`);
 });
