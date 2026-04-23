@@ -13,6 +13,14 @@ app.use(cors());
 // Allows the server to parse incoming JSON payloads
 app.use(express.json()); 
 
+// The "Heartbeat" endpoint for UptimeRobot
+app.get('/', (req, res) => {
+    res.send("MiddleMan Bot is Alive!");
+});
+
+app.listen(PORT, () => {
+    console.log(`Heartbeat server running on port ${PORT}`);
+});
 
 // --- ADMIN DASHBOARD API ROUTES ---
 
