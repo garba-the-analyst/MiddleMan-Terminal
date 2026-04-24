@@ -10,6 +10,8 @@ import { getCryptoPrice } from './cryptoApi.js';
 export const whatsappClient = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: { 
+        // 👇 CRUCIAL: Tells Puppeteer to use the Chrome installed by Hugging Face
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH, 
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',

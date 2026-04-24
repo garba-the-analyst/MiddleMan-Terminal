@@ -5,7 +5,8 @@ import pool from './config/db.js';
 import { whatsappClient } from './services/whatsapp.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// HUGGING FACE REQUIREMENT: Must listen on port 7860
+const PORT = 7860;
 
 // --- MIDDLEWARE ---
 // Allows your Vue.js dashboard to securely communicate with this API
@@ -13,9 +14,9 @@ app.use(cors());
 // Allows the server to parse incoming JSON payloads
 app.use(express.json()); 
 
-// The "Heartbeat" endpoint for UptimeRobot
+// The "Heartbeat" endpoint for Hugging Face
 app.get('/', (req, res) => {
-    res.send("MiddleMan Bot is Alive!");
+    res.send("MiddleMan Bot is Alive and Running on Hugging Face!");
 });
 
 
@@ -87,8 +88,10 @@ app.post('/api/admin/giftcards/approve', async (req, res) => {
 
 
 // --- INITIALIZE BOT & START SERVER ---
-whatsappClient.initialize();
-
 app.listen(PORT, () => {
-    console.log(`MiddleMan Server & Heartbeat running on port ${PORT}`);
+    console.log(`\n🌐 MiddleMan Server & Heartbeat running on port ${PORT}`);
+    console.log(`🚀 Initializing WhatsApp Terminal...`);
+    
+    // We start the bot AFTER the server listens so Hugging Face immediately knows we are alive
+    whatsappClient.initialize();
 });
