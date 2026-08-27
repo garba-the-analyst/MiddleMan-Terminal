@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 
 const activeTab = ref('Gift Card Trades')
@@ -18,29 +18,45 @@ const giftcardTrades = ref<any[]>([])
 const dashboardStats = ref({ activeUsers: 0, pendingCards: 0, todayVolume: '₦0' })
 const priceCatalogue = ref<any[]>([])
 const selectedImage = ref<string | null>(null)
+const isLive = ref(false)
+let pollTimer: number | null = null
 
 const auditLogs = ref([
   { id: 'LOG-301', employee: 'Suleiman (Support L1)', action: 'Approved Giftcard GC-9078', time: '10:42 AM', status: 'Success' },
   { id: 'LOG-302', employee: 'Aisha (Risk Lead)', action: 'Updated Steam Rate to ₦1,450/$', time: '09:15 AM', status: 'Notice' },
 ])
 
-onMounted(async () => {
+const API_BASE = '' // uses Vite proxy /api -> 3000
+
+async function fetchDashboard() {
   try {
-    const response = await axios.get('http://127.0.0.1:3000/api/v1/admin/dashboard')
-    giftcardTrades.value = response.data.trades
-    dashboardStats.value = response.data.stats
+    // Dashboard is public for demo; resolve still works without token (see crates/mm-api/src/handlers/admin.rs)
+    const response = await axios.get(`${API_BASE}/api/v1/admin/dashboard`)
+    giftcardTrades.value = response.data.trades || []
+    dashboardStats.value = response.data.stats || { activeUsers: 0, pendingCards: 0, todayVolume: '₦0' }
     if (response.data.catalogue) priceCatalogue.value = response.data.catalogue
+    isLive.value = true
   } catch (error) {
     console.error('Failed to connect to Rust API:', error)
+    isLive.value = false
   }
+}
+
+onMounted(async () => {
+  await fetchDashboard()
+  pollTimer = window.setInterval(fetchDashboard, 3000)
 })
 
-// Action handler for the buttons
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+})
+
+// Action handler for the buttons — handles both legacy "Approved"/"Rejected" and new "approve"/"reject"
 const resolveTrade = async (trade: any, status: string) => {
   let reason = ''
-  if (status === 'Rejected') {
+  if (status === 'Rejected' || status === 'reject' || status === 'rejected') {
     const input = window.prompt("Enter rejection reason (User will see this on WhatsApp):", "Card has already been redeemed.")
-    if (input === null) return // Admin cancelled
+    if (input === null) return
     reason = input
   }
 
@@ -48,15 +64,20 @@ const resolveTrade = async (trade: any, status: string) => {
   trade.status = 'Processing...'
 
   try {
-    await axios.post(`http://127.0.0.1:3000/api/v1/admin/trades/${trade.db_id}/resolve`, {
+    // Backend now accepts both {status} and {action} (case-insensitive) — see handlers/admin.rs
+    await axios.post(`${API_BASE}/api/v1/admin/trades/${trade.db_id}/resolve`, {
       status,
+      action: status.toLowerCase(),
       reason
     })
-    trade.status = status // Commit status change on UI
-  } catch (error) {
+    // Optimistic update; will be corrected on next poll
+    trade.status = status === 'Approved' || status === 'approve' ? 'Approved' : 'Rejected'
+    setTimeout(fetchDashboard, 800)
+  } catch (error: any) {
     console.error('Failed to resolve trade:', error)
-    alert('Failed to execute resolution. Ensure Rust server is running.')
-    trade.status = originalStatus // Revert
+    const msg = error?.response?.data?.error || 'Failed to execute resolution. Ensure Rust server is running on :3000.'
+    alert(msg)
+    trade.status = originalStatus
   }
 }
 </script>
@@ -103,8 +124,12 @@ const resolveTrade = async (trade: any, status: string) => {
       <header class="bg-navy-dark border-b border-obsidian-border px-8 py-4 flex justify-between items-center shrink-0">
         <div class="flex items-center space-x-4">
           <h2 class="text-xl font-bold text-silver-light">{{ activeTab }}</h2>
-          <span class="bg-navy px-3 py-1 rounded-full text-xs text-silver-metallic border border-obsidian-border">Live Stream</span>
+          <span :class="[
+            'px-3 py-1 rounded-full text-xs border',
+            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'
+          ]">{{ isLive ? '● Live' : '○ Offline — check API on :3000' }}</span>
         </div>
+        <button @click="fetchDashboard()" class="text-xs px-3 py-1 rounded bg-obsidian-card border border-obsidian-border text-silver-muted hover:text-silver-light">↻ Refresh</button>
       </header>
 
       <div class="flex-1 overflow-auto p-8 space-y-6">
@@ -125,7 +150,11 @@ const resolveTrade = async (trade: any, status: string) => {
             </div>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+           <div v-if="giftcardTrades.length === 0" class="text-center py-16 border border-dashed border-obsidian-border rounded-xl bg-obsidian-card/50">
+              <p class="text-silver-muted text-sm">No trades yet — send a WhatsApp gift-card photo or run <code class="bg-obsidian-dark px-2 py-1 rounded">bash scripts/demo-seed.sh</code></p>
+              <p class="text-xs text-silver-dark mt-2">API must be running on :3000 and Redis on :6379</p>
+            </div>
+            <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div v-for="trade in giftcardTrades" :key="trade.id" class="bg-obsidian-card border border-obsidian-border rounded-xl p-6 space-y-4">
               <div class="flex justify-between items-start">
                 <div>

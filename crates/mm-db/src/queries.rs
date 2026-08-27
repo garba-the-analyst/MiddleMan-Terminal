@@ -203,6 +203,15 @@ pub async fn resolve_trade(
             .await?;
 
             sqlx::query!(
+                r#"INSERT INTO wallets (user_id, wallet_type, currency, balance)
+                   VALUES ($1, 'FIAT_NGN', 'NGN', 0)
+                   ON CONFLICT (user_id, currency) DO NOTHING"#,
+                row.user_id
+            )
+            .execute(&mut *tx)
+            .await?;
+
+            sqlx::query!(
                 r#"UPDATE wallets SET balance = balance + $1
                    WHERE user_id = $2 AND currency = 'NGN'"#,
                 row.payout,
