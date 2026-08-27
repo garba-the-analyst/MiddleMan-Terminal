@@ -1,0 +1,34 @@
+# Rust
+/target/
+**/target/
+
+# Node
+node_modules/
+apps/wa-bridge/node_modules/
+apps/admin-dashboard/node_modules/
+apps/*/dist/
+apps/*/build/
+
+# Env / secrets — never commit
+.env
+!.env.example
+auth_info_baileys/
+temp_media/
+wa_sessions/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs / runtime
+*.log
+/tmp/opencode/
+
+# Docker volumes (host-mounted if any)
+pgdata/
+
+# SQLx offline cache (commit when generated; ignore for now if not present)
+# .sqlx/

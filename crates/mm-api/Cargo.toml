@@ -1,0 +1,29 @@
+[package]
+name = "mm-api"
+version = "2.4.0"
+edition = "2021"
+
+[[bin]]
+name = "mm-api"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.7"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+rust_decimal = { workspace = true }
+uuid = { workspace = true }
+redis = { version = "0.27", features = ["tokio-comp"] }
+reqwest = { version = "0.12", features = ["json"] }
+dotenvy = "0.15"
+anyhow = "1"
+thiserror = { workspace = true }
+rand = "0.8"
+tower-http = { version = "0.5", features = ["cors"] }
+mm-ai = { path = "../mm-ai" }
+mm-core = { path = "../mm-core" }
+mm-db = { path = "../mm-db" }
+
+[dev-dependencies]

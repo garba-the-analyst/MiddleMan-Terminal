@@ -1,0 +1,19 @@
+name: middleman
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mm_user
+      POSTGRES_PASSWORD: mm_password
+      POSTGRES_DB: middleman_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
+
+networks:
+  mm-internal:
+    driver: bridge
