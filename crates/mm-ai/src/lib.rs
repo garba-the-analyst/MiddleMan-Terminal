@@ -1,7 +1,9 @@
 pub mod fallback;
+pub mod knowledge;
 pub mod normalizer;
 pub mod parser;
 pub mod radar;
+pub mod sentiment;
 pub mod vision;
 
 pub use fallback::rulebook_parse;

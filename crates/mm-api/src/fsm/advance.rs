@@ -31,6 +31,7 @@ const MIN_CARD_USD: f64 = 10.0;
 const MAX_CARD_USD: f64 = 2000.0;
 
 pub async fn advance(state: &AppState, input: FsmInput) -> Result<(), FsmError> {
+    let t0 = std::time::Instant::now();
     let user = db::ensure_user(&state.pool, &input.whatsapp_number)
         .await
         .map_err(|e| FsmError::Retry(e.to_string()))?;
@@ -59,6 +60,14 @@ pub async fn advance(state: &AppState, input: FsmInput) -> Result<(), FsmError> 
         .await
         .map_err(|e| FsmError::Retry(e.to_string()))?;
 
+    // === Case Study 1: sentiment + urgency + category classification ===
+    let su = mm_ai::sentiment::classify_sentiment_urgency(&input.text, &parsed.intent, parsed.confidence);
+
+    // Knowledge base retrieval for FAQ / unknown
+    let kb_hit = if matches!(parsed.intent.as_str(), "UNKNOWN" | "HELP") {
+        mm_ai::knowledge::search_kb(&input.text, Some(&su.category))
+    } else { None };
+
     // A photo is an implicit liquidation request — Vision OCR decides the details,
     // so we never bounce an image to the help menu.
     let intent = if input.media_url.is_some()
@@ -69,7 +78,8 @@ pub async fn advance(state: &AppState, input: FsmInput) -> Result<(), FsmError> 
         parsed.intent.as_str()
     };
 
-    match intent {
+    // Capture response text for logging before sending
+    let result: Result<(), FsmError> = match intent {
         "CHECK_BALANCE" => {
             let summary = crate::wallet::wallet_summary(state, user.id).await;
             reply(state, &jid, &summary).await
@@ -90,15 +100,61 @@ pub async fn advance(state: &AppState, input: FsmInput) -> Result<(), FsmError> 
             )
             .await
         }
-        _ => reply(
-            state,
-            &jid,
-            "👋 Welcome to *MiddleMan* — your WhatsApp neo-bank.\n\nI can help you:\n\
-             🎁 *Liquidate a gift card* — send a photo of it with the value (e.g. \"Steam $50\")\n\
-             💼 *Check balance* — just ask \"balance\"\n\nWhat would you like to do?",
-        )
-        .await,
+        _ => {
+            // FAQ / knowledge base path — meets Case Study 1 "Retrieve answers from KB"
+            if let Some(ref art) = kb_hit {
+                reply(state, &jid, &format!("{}\n\n_Source: {}_", art.answer, art.category)).await
+            } else {
+                reply(
+                    state,
+                    &jid,
+                    "👋 Welcome to *MiddleMan* — your WhatsApp neo-bank.\n\nI can help you:\n\
+                     🎁 *Liquidate a gift card* — send a photo of it with the value (e.g. \"Steam $50\")\n\
+                     💼 *Check balance* — just ask \"balance\"\n\
+                     💸 *Send money* — \"Send 5000 to 08012345678\"\n\
+                     🛡️ *Scan a token* — send a contract address\n\nWhat would you like to do?",
+                )
+                .await
+            }
+        }
+    };
+
+    let handling_ms = t0.elapsed().as_millis() as i32;
+    let response_snippet: Option<String> = None; // we capture inside reply; for now store kb answer or intent
+    let resp_text = kb_hit.as_ref().map(|a| a.answer.clone()).or_else(|| Some(format!("handled:{}", intent)));
+
+    // Escalation handling — if flagged, tag interaction and notify (log)
+    let escalated = su.escalation;
+    if escalated {
+        eprintln!("ESCALATE {} cat={} urgency={} sentiment={} reason={:?}", input.whatsapp_number, su.category, su.urgency, su.sentiment, su.escalation_reason);
     }
+
+    // Log interaction for analytics (never fails the main flow)
+    let _ = db::insert_bot_interaction(
+        &state.pool,
+        &input.message_id,
+        &input.whatsapp_number,
+        Some(user.id),
+        &input.text,
+        &parsed.intent,
+        &su.category,
+        &su.sentiment,
+        &su.urgency,
+        su.urgency_score,
+        parsed.confidence,
+        resp_text.as_deref(),
+        None,
+        escalated,
+        su.escalation_reason.as_deref(),
+        handling_ms,
+    ).await;
+
+    // Metrics for dashboard
+    let _ = db::upsert_bot_analytics(&state.pool, "messages_inbound", 1, None).await;
+    if escalated { let _ = db::upsert_bot_analytics(&state.pool, "escalated", 1, None).await; }
+    if kb_hit.is_some() { let _ = db::upsert_bot_analytics(&state.pool, "knowledge_base_hits", 1, None).await; }
+
+    result
 }
 
 struct GiftParams {

@@ -46,6 +46,13 @@ pub fn verify_pin(pin: &str, stored_hash: &str) -> Result<bool, argon2::password
         .is_ok())
 }
 
+pub fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
+    let salt = SaltString::generate(&mut OsRng);
+    argon2_spec()
+        .hash_password(password.as_bytes(), &salt)
+        .map(|h| h.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

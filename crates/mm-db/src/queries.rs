@@ -471,3 +471,531 @@ pub async fn p2p_transfer_atomic(
     tx.commit().await?;
     Ok(tx_id)
 }
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct AdminEmployee {
+    pub id: Uuid,
+    pub email: String,
+    pub password_hash: String,
+    pub full_name: Option<String>,
+    pub role: String,
+    pub permissions: serde_json::Value,
+    pub is_active: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub last_login: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+pub async fn get_admin_by_email(pool: &PgPool, email: &str) -> Result<Option<AdminEmployee>, DbError> {
+    let row = sqlx::query_as::<_, AdminEmployee>(
+        r#"SELECT id, email, password_hash, full_name, role, permissions, is_active, created_at, last_login
+           FROM admin_employees WHERE email = $1"#,
+    )
+    .bind(email)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+pub async fn create_admin_employee(
+    pool: &PgPool,
+    email: &str,
+    password_hash: &str,
+    full_name: Option<&str>,
+    role: &str,
+    permissions: serde_json::Value,
+    created_by: Option<Uuid>,
+) -> Result<AdminEmployee, DbError> {
+    let row = sqlx::query_as::<_, AdminEmployee>(
+        r#"INSERT INTO admin_employees (email, password_hash, full_name, role, permissions, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, email, password_hash, full_name, role, permissions, is_active, created_at, last_login"#,
+    )
+    .bind(email)
+    .bind(password_hash)
+    .bind(full_name)
+    .bind(role)
+    .bind(permissions)
+    .bind(created_by)
+    .fetch_one(pool)
+    .await?;
+    Ok(row)
+}
+
+pub async fn list_admin_employees(pool: &PgPool) -> Result<Vec<AdminEmployee>, DbError> {
+    let rows = sqlx::query_as::<_, AdminEmployee>(
+        r#"SELECT id, email, password_hash, full_name, role, permissions, is_active, created_at, last_login
+           FROM admin_employees ORDER BY created_at DESC"#,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn get_admin_employee(pool: &PgPool, id: Uuid) -> Result<Option<AdminEmployee>, DbError> {
+    let row = sqlx::query_as::<_, AdminEmployee>(
+        r#"SELECT id, email, password_hash, full_name, role, permissions, is_active, created_at, last_login
+           FROM admin_employees WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+pub async fn update_admin_employee(
+    pool: &PgPool,
+    id: Uuid,
+    full_name: Option<String>,
+    role: Option<String>,
+    permissions: Option<serde_json::Value>,
+    is_active: Option<bool>,
+) -> Result<Option<AdminEmployee>, DbError> {
+    let row = sqlx::query_as::<_, AdminEmployee>(
+        r#"UPDATE admin_employees
+           SET full_name = COALESCE($2, full_name),
+               role = COALESCE($3, role),
+               permissions = COALESCE($4, permissions),
+               is_active = COALESCE($5, is_active)
+           WHERE id = $1
+           RETURNING id, email, password_hash, full_name, role, permissions, is_active, created_at, last_login"#,
+    )
+    .bind(id)
+    .bind(full_name)
+    .bind(role)
+    .bind(permissions)
+    .bind(is_active)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+pub async fn delete_admin_employee(pool: &PgPool, id: Uuid) -> Result<(), DbError> {
+    sqlx::query!(r#"DELETE FROM admin_employees WHERE id = $1"#, id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn validate_admin_token(pool: &PgPool, token: &str) -> Result<Option<Uuid>, DbError> {
+    let row = sqlx::query!(
+        r#"SELECT ae.id FROM admin_employees ae
+           JOIN admin_tokens at ON at.employee_id = ae.id
+           WHERE at.token = $1 AND at.expires_at > NOW() AND ae.is_active = true"#,
+        token
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| r.id))
+}
+
+pub async fn create_admin_token(pool: &PgPool, employee_id: Uuid) -> Result<String, DbError> {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    let token = hex::encode(bytes);
+    let expires_at = chrono::Utc::now() + chrono::Duration::days(30);
+
+    sqlx::query!(
+        r#"INSERT INTO admin_tokens (token, employee_id, expires_at) VALUES ($1, $2, $3)"#,
+        token,
+        employee_id,
+        expires_at
+    )
+    .execute(pool)
+    .await?;
+    Ok(token)
+}
+
+pub async fn update_admin_last_login(pool: &PgPool, id: Uuid) -> Result<(), DbError> {
+    sqlx::query!(r#"UPDATE admin_employees SET last_login = NOW() WHERE id = $1"#, id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn has_permission(pool: &PgPool, emp_id: Uuid, permission: &str) -> Result<bool, DbError> {
+    let row = sqlx::query_scalar!(
+        r#"SELECT has_permission($1, $2)"#,
+        emp_id,
+        permission
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.flatten().unwrap_or(false))
+}
+
+pub async fn create_price_catalogue(
+    pool: &PgPool,
+    brand: &str,
+    country: &str,
+    card_format: &str,
+    rate_per_dollar: Decimal,
+    active: bool,
+    created_by: Option<Uuid>,
+) -> Result<PriceCatalogue, DbError> {
+    let mut tx = pool.begin().await?;
+    
+    let cat = sqlx::query_as::<_, PriceCatalogue>(
+        r#"INSERT INTO price_catalogue (brand, country, card_format, rate_per_dollar, active, created_by, updated_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $6)
+           RETURNING id, brand, country, card_format, rate_per_dollar, active, created_by, updated_by, created_at, updated_at"#,
+    )
+    .bind(brand)
+    .bind(country)
+    .bind(card_format)
+    .bind(rate_per_dollar)
+    .bind(active)
+    .bind(created_by)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    sqlx::query!(
+        r#"INSERT INTO price_catalogue_audit (catalogue_id, employee_id, action, new_values)
+           VALUES ($1, $2, 'CREATE', $3)"#,
+        cat.id,
+        created_by,
+        serde_json::to_value(&cat).unwrap()
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(cat)
+}
+
+pub async fn update_price_catalogue(
+    pool: &PgPool,
+    id: i64,
+    brand: Option<&str>,
+    country: Option<&str>,
+    card_format: Option<&str>,
+    rate_per_dollar: Option<Decimal>,
+    active: Option<bool>,
+    updated_by: Option<Uuid>,
+) -> Result<Option<PriceCatalogue>, DbError> {
+    let mut tx = pool.begin().await?;
+
+    let old = sqlx::query_as::<_, PriceCatalogue>(
+        r#"SELECT id, brand, country, card_format, rate_per_dollar, active, created_by, updated_by, created_at, updated_at
+           FROM price_catalogue WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(old) = old else {
+        return Ok(None);
+    };
+
+    let cat = sqlx::query_as::<_, PriceCatalogue>(
+        r#"UPDATE price_catalogue
+           SET brand = COALESCE($2, brand),
+               country = COALESCE($3, country),
+               card_format = COALESCE($4, card_format),
+               rate_per_dollar = COALESCE($5, rate_per_dollar),
+               active = COALESCE($6, active),
+               updated_by = COALESCE($7, updated_by)
+           WHERE id = $1
+           RETURNING id, brand, country, card_format, rate_per_dollar, active, created_by, updated_by, created_at, updated_at"#,
+    )
+    .bind(id)
+    .bind(brand)
+    .bind(country)
+    .bind(card_format)
+    .bind(rate_per_dollar)
+    .bind(active)
+    .bind(updated_by)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if let Some(ref cat) = cat {
+        sqlx::query!(
+            r#"INSERT INTO price_catalogue_audit (catalogue_id, employee_id, action, old_values, new_values)
+               VALUES ($1, $2, 'UPDATE', $3, $4)"#,
+            id,
+            updated_by,
+            serde_json::to_value(&old).unwrap(),
+            serde_json::to_value(cat).unwrap()
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(cat)
+}
+
+pub async fn delete_price_catalogue(pool: &PgPool, id: i64) -> Result<(), DbError> {
+    let mut tx = pool.begin().await?;
+
+    let old = sqlx::query_as::<_, PriceCatalogue>(
+        r#"SELECT id, brand, country, card_format, rate_per_dollar, active, created_by, updated_by, created_at, updated_at
+           FROM price_catalogue WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if let Some(old) = old {
+        sqlx::query!(
+            r#"INSERT INTO price_catalogue_audit (catalogue_id, employee_id, action, old_values)
+               VALUES ($1, NULL, 'DELETE', $2)"#,
+            id,
+            serde_json::to_value(&old).unwrap()
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(r#"DELETE FROM price_catalogue WHERE id = $1"#, id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn get_bot_analytics(
+    pool: &PgPool,
+    from: Option<&str>,
+    to: Option<&str>,
+    metric: Option<&str>,
+) -> Result<Vec<BotAnalyticsRow>, DbError> {
+    let from_date = from.and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+    let to_date = to.and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+    
+    let rows = match (from_date, to_date, metric) {
+        (Some(from), Some(to), Some(metric)) => {
+            sqlx::query_as!(
+                BotAnalyticsRow,
+                r#"SELECT id, date, metric_name, metric_value, metadata
+                   FROM bot_analytics WHERE date >= $1 AND date <= $2 AND metric_name = $3
+                   ORDER BY date DESC, metric_name ASC LIMIT 1000"#,
+                from,
+                to,
+                metric
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        (Some(from), Some(to), None) => {
+            sqlx::query_as!(
+                BotAnalyticsRow,
+                r#"SELECT id, date, metric_name, metric_value, metadata
+                   FROM bot_analytics WHERE date >= $1 AND date <= $2
+                   ORDER BY date DESC, metric_name ASC LIMIT 1000"#,
+                from,
+                to
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        (Some(from), None, Some(metric)) => {
+            sqlx::query_as!(
+                BotAnalyticsRow,
+                r#"SELECT id, date, metric_name, metric_value, metadata
+                   FROM bot_analytics WHERE date >= $1 AND metric_name = $2
+                   ORDER BY date DESC, metric_name ASC LIMIT 1000"#,
+                from,
+                metric
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        (None, Some(to), Some(metric)) => {
+            sqlx::query_as!(
+                BotAnalyticsRow,
+                r#"SELECT id, date, metric_name, metric_value, metadata
+                   FROM bot_analytics WHERE date <= $1 AND metric_name = $2
+                   ORDER BY date DESC, metric_name ASC LIMIT 1000"#,
+                to,
+                metric
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        (Some(from), None, None) => {
+            sqlx::query_as!(
+                BotAnalyticsRow,
+                r#"SELECT id, date, metric_name, metric_value, metadata
+                   FROM bot_analytics WHERE date >= $1
+                   ORDER BY date DESC, metric_name ASC LIMIT 1000"#,
+                from
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        (None, Some(to), None) => {
+            sqlx::query_as!(
+                BotAnalyticsRow,
+                r#"SELECT id, date, metric_name, metric_value, metadata
+                   FROM bot_analytics WHERE date <= $1
+                   ORDER BY date DESC, metric_name ASC LIMIT 1000"#,
+                to
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        (None, None, Some(metric)) => {
+            sqlx::query_as!(
+                BotAnalyticsRow,
+                r#"SELECT id, date, metric_name, metric_value, metadata
+                   FROM bot_analytics WHERE metric_name = $1
+                   ORDER BY date DESC, metric_name ASC LIMIT 1000"#,
+                metric
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        (None, None, None) => {
+            sqlx::query_as!(
+                BotAnalyticsRow,
+                r#"SELECT id, date, metric_name, metric_value, metadata
+                   FROM bot_analytics
+                   ORDER BY date DESC, metric_name ASC LIMIT 1000"#,
+            )
+            .fetch_all(pool)
+            .await?
+        }
+    };
+    Ok(rows)
+}
+
+pub async fn upsert_bot_analytics(
+    pool: &PgPool,
+    metric_name: &str,
+    metric_value: i64,
+    metadata: Option<serde_json::Value>,
+) -> Result<(), DbError> {
+    sqlx::query!(
+        r#"INSERT INTO bot_analytics (metric_name, metric_value, metadata)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (date, metric_name) DO UPDATE SET
+               metric_value = bot_analytics.metric_value + EXCLUDED.metric_value,
+               metadata = EXCLUDED.metadata"#,
+        metric_name,
+        metric_value,
+        metadata.unwrap_or(serde_json::json!({}))
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_role_permissions(pool: &PgPool) -> Result<Vec<serde_json::Value>, DbError> {
+    let rows = sqlx::query!(
+        r#"SELECT role, jsonb_agg(jsonb_build_object('permission', permission, 'description', description)) as permissions
+           FROM role_permissions GROUP BY role ORDER BY role"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(serde_json::json!({
+            "role": row.role,
+            "permissions": row.permissions.unwrap_or(serde_json::json!([])),
+        }));
+    }
+    Ok(result)
+}
+
+// ========== Bot Support Case Study 1 queries ==========
+
+pub async fn insert_bot_interaction(
+    pool: &PgPool,
+    message_id: &str,
+    whatsapp_number: &str,
+    user_id: Option<Uuid>,
+    inbound_text: &str,
+    intent: &str,
+    category: &str,
+    sentiment: &str,
+    urgency: &str,
+    urgency_score: i32,
+    confidence: f64,
+    response_text: Option<&str>,
+    kb_article_id: Option<Uuid>,
+    escalated: bool,
+    escalation_reason: Option<&str>,
+    handling_ms: i32,
+) -> Result<Uuid, DbError> {
+    let row = sqlx::query!(
+        r#"INSERT INTO bot_interactions (message_id, whatsapp_number, user_id, inbound_text, intent, category, sentiment, urgency, urgency_score, confidence, response_text, kb_article_id, escalated, escalation_reason, handling_ms)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+           ON CONFLICT (message_id) DO NOTHING
+           RETURNING id"#,
+        message_id, whatsapp_number, user_id, inbound_text, intent, category, sentiment, urgency, urgency_score,
+        Decimal::try_from(confidence).unwrap_or(Decimal::from(0)),
+        response_text, kb_article_id, escalated, escalation_reason, handling_ms
+    ).fetch_optional(pool).await?;
+    Ok(row.map(|r| r.id).unwrap_or_else(Uuid::nil))
+}
+
+pub async fn list_bot_interactions(pool: &PgPool, limit: i64, escalated_only: bool) -> Result<Vec<BotInteraction>, DbError> {
+    let rows = if escalated_only {
+        sqlx::query_as::<_, BotInteraction>(
+            r#"SELECT id, message_id, whatsapp_number, user_id, inbound_text, intent, category, sentiment, urgency, urgency_score, confidence, response_text, escalated, escalation_reason, assigned_agent, resolved, handling_ms, created_at
+               FROM bot_interactions WHERE escalated = true ORDER BY created_at DESC LIMIT $1"#,
+        ).bind(limit).fetch_all(pool).await?
+    } else {
+        sqlx::query_as::<_, BotInteraction>(
+            r#"SELECT id, message_id, whatsapp_number, user_id, inbound_text, intent, category, sentiment, urgency, urgency_score, confidence, response_text, escalated, escalation_reason, assigned_agent, resolved, handling_ms, created_at
+               FROM bot_interactions ORDER BY created_at DESC LIMIT $1"#,
+        ).bind(limit).fetch_all(pool).await?
+    };
+    Ok(rows)
+}
+
+pub async fn get_bot_stats(pool: &PgPool) -> Result<BotStats, DbError> {
+    let total: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "c!" FROM bot_interactions"#).fetch_one(pool).await?;
+    let today: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "c!" FROM bot_interactions WHERE created_at >= CURRENT_DATE"#).fetch_one(pool).await?;
+    let escalated: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "c!" FROM bot_interactions WHERE escalated = true"#).fetch_one(pool).await?;
+    let avg_ms: Option<Decimal> = sqlx::query_scalar!(r#"SELECT AVG(handling_ms) FROM bot_interactions"#).fetch_one(pool).await?;
+    let by_category = sqlx::query!(r#"SELECT category, COUNT(*) as c FROM bot_interactions GROUP BY category ORDER BY c DESC"#).fetch_all(pool).await?;
+    let by_sentiment = sqlx::query!(r#"SELECT sentiment, COUNT(*) as c FROM bot_interactions GROUP BY sentiment"#).fetch_all(pool).await?;
+    let by_urgency = sqlx::query!(r#"SELECT urgency, COUNT(*) as c FROM bot_interactions GROUP BY urgency"#).fetch_all(pool).await?;
+    let by_intent = sqlx::query!(r#"SELECT intent, COUNT(*) as c FROM bot_interactions GROUP BY intent ORDER BY c DESC LIMIT 8"#).fetch_all(pool).await?;
+    let last_14 = sqlx::query!(r#"SELECT to_char(date, 'YYYY-MM-DD') as d, metric_value FROM bot_analytics WHERE metric_name='messages_inbound' ORDER BY date ASC"#).fetch_all(pool).await?;
+    Ok(BotStats {
+        total_interactions: total,
+        today_interactions: today,
+        escalated_count: escalated,
+        auto_resolved: total - escalated,
+        avg_handling_ms: avg_ms.and_then(|v| v.to_string().parse::<f64>().ok()).unwrap_or(0.0) as i64,
+        by_category: by_category.into_iter().map(|r| (r.category, r.c.unwrap_or(0))).collect(),
+        by_sentiment: by_sentiment.into_iter().map(|r| (r.sentiment, r.c.unwrap_or(0))).collect(),
+        by_urgency: by_urgency.into_iter().map(|r| (r.urgency, r.c.unwrap_or(0))).collect(),
+        by_intent: by_intent.into_iter().map(|r| (r.intent, r.c.unwrap_or(0))).collect(),
+        last_14_days: last_14.into_iter().map(|r| (r.d.unwrap_or_default(), r.metric_value)).collect(),
+    })
+}
+
+pub async fn knowledge_base_search(pool: &PgPool, q: &str, category: Option<&str>, limit: i64) -> Result<Vec<KnowledgeBaseRow>, DbError> {
+    let pattern = format!("%{}%", q.to_lowercase());
+    let rows = match category {
+        Some(cat) => sqlx::query_as::<_, KnowledgeBaseRow>(
+            r#"SELECT id, category, question, answer, keywords, source, priority, is_active, created_at
+               FROM knowledge_base WHERE is_active = true AND category = $2 AND (LOWER(question) LIKE $1 OR LOWER(answer) LIKE $1 OR EXISTS (SELECT 1 FROM unnest(keywords) k WHERE LOWER(k) LIKE $1))
+               ORDER BY priority DESC LIMIT $3"#,
+        ).bind(&pattern).bind(cat).bind(limit).fetch_all(pool).await?,
+        None => sqlx::query_as::<_, KnowledgeBaseRow>(
+            r#"SELECT id, category, question, answer, keywords, source, priority, is_active, created_at
+               FROM knowledge_base WHERE is_active = true AND (LOWER(question) LIKE $1 OR LOWER(answer) LIKE $1 OR EXISTS (SELECT 1 FROM unnest(keywords) k WHERE LOWER(k) LIKE $1))
+               ORDER BY priority DESC LIMIT $2"#,
+        ).bind(&pattern).bind(limit).fetch_all(pool).await?,
+    };
+    Ok(rows)
+}
+
+pub async fn knowledge_base_list(pool: &PgPool) -> Result<Vec<KnowledgeBaseRow>, DbError> {
+    let rows = sqlx::query_as::<_, KnowledgeBaseRow>(
+        r#"SELECT id, category, question, answer, keywords, source, priority, is_active, created_at FROM knowledge_base WHERE is_active = true ORDER BY priority DESC"#,
+    ).fetch_all(pool).await?;
+    Ok(rows)
+}
+
+pub async fn resolve_bot_interaction(pool: &PgPool, id: Uuid, agent_id: Uuid) -> Result<(), DbError> {
+    sqlx::query!(r#"UPDATE bot_interactions SET resolved = true, assigned_agent = $2 WHERE id = $1"#, id, agent_id).execute(pool).await?;
+    Ok(())
+}

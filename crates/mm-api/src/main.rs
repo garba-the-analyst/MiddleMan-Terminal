@@ -10,6 +10,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use handlers::admin::{bot_interactions, bot_resolve_interaction, bot_stats, create_catalogue, create_employee, dashboard, delete_catalogue, delete_employee, get_analytics, get_employee, get_roles, kb_search, list_employees, login, resolve_trade, track_metric, update_catalogue, update_employee};
 use state::AppState;
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::cors::{Any, CorsLayer};
@@ -41,9 +42,34 @@ async fn main() -> anyhow::Result<()> {
         .allow_headers(Any);
 
     let app = Router::new()
+        // Auth
+        .route("/api/v1/admin/login", post(login))
+        // Dashboard
         .route("/api/v1/admin/health", get(handlers::health::health))
-        .route("/api/v1/admin/dashboard", get(handlers::admin::dashboard))
-        .route("/api/v1/admin/trades/:id/resolve", post(handlers::admin::resolve_trade))
+        .route("/api/v1/admin/dashboard", get(dashboard))
+        // Employee management
+        .route("/api/v1/admin/employees", get(list_employees))
+        .route("/api/v1/admin/employees", post(create_employee))
+        .route("/api/v1/admin/employees/:id", get(get_employee))
+        .route("/api/v1/admin/employees/:id", post(update_employee))
+        .route("/api/v1/admin/employees/:id", axum::routing::delete(delete_employee))
+        // Price catalogue
+        .route("/api/v1/admin/catalogue", get(dashboard)) // list via dashboard
+        .route("/api/v1/admin/catalogue", post(create_catalogue))
+        .route("/api/v1/admin/catalogue/:id", post(update_catalogue))
+        .route("/api/v1/admin/catalogue/:id", axum::routing::delete(delete_catalogue))
+        // Trades
+        .route("/api/v1/admin/trades/:id/resolve", post(resolve_trade))
+        // Analytics & Bot (Case Study 1)
+        .route("/api/v1/admin/analytics", get(get_analytics))
+        .route("/api/v1/admin/analytics/track", post(track_metric))
+        .route("/api/v1/admin/bot/stats", get(bot_stats))
+        .route("/api/v1/admin/bot/interactions", get(bot_interactions))
+        .route("/api/v1/admin/bot/interactions/:id/resolve", post(bot_resolve_interaction))
+        .route("/api/v1/admin/kb", get(kb_search))
+        // Roles
+        .route("/api/v1/admin/roles", get(get_roles))
+        // Debug
         .route("/api/v1/debug/ingest", post(handlers::debug_ingest::ingest))
         .layer(cors)
         .with_state(state);

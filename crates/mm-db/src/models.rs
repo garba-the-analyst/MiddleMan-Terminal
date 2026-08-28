@@ -1,4 +1,5 @@
 use rust_decimal::Decimal;
+use serde::Serialize;
 use sqlx::types::chrono::{DateTime, Utc};
 use uuid::Uuid;
 
@@ -10,6 +11,42 @@ pub struct UserRow {
     pub current_state: String,
     pub failed_pin_attempts: i32,
     pub pin_locked_until: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct AdminEmployee {
+    pub id: Uuid,
+    pub email: String,
+    pub password_hash: String,
+    pub full_name: Option<String>,
+    pub role: String,
+    pub permissions: serde_json::Value,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub last_login: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
+pub struct PriceCatalogue {
+    pub id: i64,
+    pub brand: String,
+    pub country: String,
+    pub card_format: String,
+    pub rate_per_dollar: Decimal,
+    pub active: bool,
+    pub created_by: Option<Uuid>,
+    pub updated_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct BotAnalyticsRow {
+    pub id: Uuid,
+    pub date: chrono::NaiveDate,
+    pub metric_name: String,
+    pub metric_value: i64,
+    pub metadata: serde_json::Value,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -77,4 +114,53 @@ pub struct WalletRow {
     pub currency: String,
     pub balance: Decimal,
     pub reserved_balance: Decimal,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct BotInteraction {
+    pub id: Uuid,
+    pub message_id: Option<String>,
+    pub whatsapp_number: String,
+    pub user_id: Option<Uuid>,
+    pub inbound_text: String,
+    pub intent: String,
+    pub category: String,
+    pub sentiment: String,
+    pub urgency: String,
+    pub urgency_score: i32,
+    pub confidence: Option<Decimal>,
+    pub response_text: Option<String>,
+    pub escalated: bool,
+    pub escalation_reason: Option<String>,
+    pub assigned_agent: Option<Uuid>,
+    pub resolved: bool,
+    pub handling_ms: Option<i32>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct KnowledgeBaseRow {
+    pub id: Uuid,
+    pub category: String,
+    pub question: String,
+    pub answer: String,
+    pub keywords: Option<Vec<String>>,
+    pub source: Option<String>,
+    pub priority: Option<i32>,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BotStats {
+    pub total_interactions: i64,
+    pub today_interactions: i64,
+    pub escalated_count: i64,
+    pub auto_resolved: i64,
+    pub avg_handling_ms: i64,
+    pub by_category: Vec<(String, i64)>,
+    pub by_sentiment: Vec<(String, i64)>,
+    pub by_urgency: Vec<(String, i64)>,
+    pub by_intent: Vec<(String, i64)>,
+    pub last_14_days: Vec<(String, i64)>,
 }
