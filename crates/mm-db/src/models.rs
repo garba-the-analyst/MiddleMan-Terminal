@@ -58,3 +58,23 @@ pub enum ResolveAction {
     Approve,
     Reject,
 }
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct KeyVaultRow {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub chain_type: String,
+    pub public_address: String,
+    pub encrypted_private_key: String,
+    pub nonce: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct WalletRow {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub wallet_type: String,
+    pub currency: String,
+    pub balance: Decimal,
+    pub reserved_balance: Decimal,
+}

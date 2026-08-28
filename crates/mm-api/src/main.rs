@@ -3,6 +3,7 @@ mod fsm;
 mod handlers;
 mod outbound;
 mod state;
+mod wallet;
 mod worker;
 
 use axum::{

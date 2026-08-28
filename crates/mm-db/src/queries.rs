@@ -328,3 +328,146 @@ pub async fn whatsapp_number_of(pool: &PgPool, user_id: Uuid) -> Result<String, 
         .await?
         .ok_or(DbError::NotFound)?)
 }
+
+pub async fn get_user_by_phone(pool: &PgPool, phone: &str) -> Result<Option<UserRow>, DbError> {
+    let row = sqlx::query_as::<_, UserRow>(
+        r#"SELECT id, whatsapp_number, full_name, current_state, failed_pin_attempts, pin_locked_until
+           FROM users WHERE whatsapp_number = $1"#,
+    )
+    .bind(phone)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+pub async fn get_key_vault(
+    pool: &PgPool,
+    user_id: Uuid,
+    chain: &str,
+) -> Result<Option<KeyVaultRow>, DbError> {
+    let row = sqlx::query_as::<_, KeyVaultRow>(
+        r#"SELECT id, user_id, chain_type, public_address, encrypted_private_key, nonce
+           FROM key_vaults WHERE user_id = $1 AND chain_type = $2"#,
+    )
+    .bind(user_id)
+    .bind(chain)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+pub async fn insert_key_vault(
+    pool: &PgPool,
+    user_id: Uuid,
+    chain: &str,
+    address: &str,
+    encrypted_key: &str,
+) -> Result<Uuid, DbError> {
+    let row = sqlx::query!(
+        r#"INSERT INTO key_vaults (user_id, chain_type, public_address, encrypted_private_key, nonce)
+           VALUES ($1, $2, $3, $4, 'v1')
+           ON CONFLICT (user_id, chain_type) DO NOTHING
+           RETURNING id"#,
+        user_id,
+        chain,
+        address,
+        encrypted_key
+    )
+    .fetch_optional(pool)
+    .await?;
+    if let Some(r) = row {
+        Ok(r.id)
+    } else {
+        // already exists, fetch existing
+        let existing = get_key_vault(pool, user_id, chain).await?.ok_or(DbError::NotFound)?;
+        Ok(existing.id)
+    }
+}
+
+pub async fn list_wallets(pool: &PgPool, user_id: Uuid) -> Result<Vec<WalletRow>, DbError> {
+    let rows = sqlx::query_as::<_, WalletRow>(
+        r#"SELECT id, user_id, wallet_type, currency, balance, reserved_balance
+           FROM wallets WHERE user_id = $1 ORDER BY currency"#,
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn p2p_transfer_atomic(
+    pool: &PgPool,
+    sender: Uuid,
+    recipient: Uuid,
+    amount: Decimal,
+    fee: Decimal,
+) -> Result<Uuid, DbError> {
+    if sender == recipient {
+        return Err(DbError::Backend(sqlx::Error::Protocol("self transfer".into())));
+    }
+    let mut tx = pool.begin().await?;
+
+    // Ensure recipient wallet exists
+    sqlx::query!(
+        r#"INSERT INTO wallets (user_id, wallet_type, currency, balance)
+           VALUES ($1, 'FIAT_NGN', 'NGN', 0)
+           ON CONFLICT (user_id, currency) DO NOTHING"#,
+        recipient
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    // Debit sender with funds check
+    let updated = sqlx::query!(
+        r#"UPDATE wallets SET balance = balance - ($1::numeric + $2::numeric)
+           WHERE user_id = $3 AND currency = 'NGN'
+             AND balance >= ($1::numeric + $2::numeric)"#,
+        amount,
+        fee,
+        sender
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    if updated.rows_affected() == 0 {
+        tx.rollback().await.ok();
+        return Err(DbError::InsufficientFunds);
+    }
+
+    // Credit recipient
+    sqlx::query!(
+        r#"UPDATE wallets SET balance = balance + $1 WHERE user_id = $2 AND currency = 'NGN'"#,
+        amount,
+        recipient
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let tx_id = Uuid::new_v4();
+    let recipient_ref = recipient.to_string();
+    sqlx::query!(
+        r#"INSERT INTO transactions (id, user_id, tx_type, direction, amount, currency, fee_amount, recipient_identifier, status, metadata)
+           VALUES ($1, $2, 'P2P_TRANSFER', 'OUTBOUND', $3, 'NGN', $4, $5, 'SUCCESS', jsonb_build_object('counterpart', $6::text))"#,
+        tx_id,
+        sender,
+        amount,
+        fee,
+        recipient_ref,
+        recipient_ref
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query!(
+        r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, status, metadata)
+           VALUES ($1, 'P2P_TRANSFER', 'INBOUND', $2, 'NGN', 'SUCCESS', jsonb_build_object('counterpart', $3::text))"#,
+        recipient,
+        amount,
+        sender.to_string()
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(tx_id)
+}

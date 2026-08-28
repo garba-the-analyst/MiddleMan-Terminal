@@ -1,5 +1,6 @@
 use crate::config::Config;
 use mm_ai::parser::GeminiParser;
+use mm_vault::VaultAead;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 
 pub struct AppState {
@@ -8,6 +9,7 @@ pub struct AppState {
     pub redis: redis::Client,
     pub http: reqwest::Client,
     pub ai: GeminiParser,
+    pub vault: Option<VaultAead>,
 }
 
 impl AppState {
@@ -19,12 +21,21 @@ impl AppState {
             .connect(&cfg.database_url)
             .await?;
 
+        let vault = std::env::var("MM_MASTER_KEY")
+            .ok()
+            .and_then(|k| VaultAead::from_hex_master(&k).ok());
+
+        if vault.is_none() {
+            eprintln!("warning: MM_MASTER_KEY not set or invalid — wallet encryption disabled");
+        }
+
         Ok(Self {
             cfg,
             pool,
             redis: redis_client,
             http: reqwest::Client::new(),
             ai,
+            vault,
         })
     }
 }

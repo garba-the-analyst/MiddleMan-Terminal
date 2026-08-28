@@ -10,6 +10,7 @@ serde_json = { workspace = true }
 reqwest = { version = "0.12", features = ["json"] }
 once_cell = { workspace = true }
 regex = { workspace = true }
+base64 = "0.22"
 thiserror = { workspace = true }
 
 [dev-dependencies]

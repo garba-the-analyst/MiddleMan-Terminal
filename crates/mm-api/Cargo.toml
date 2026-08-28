@@ -25,5 +25,8 @@ tower-http = { version = "0.5", features = ["cors"] }
 mm-ai = { path = "../mm-ai" }
 mm-core = { path = "../mm-core" }
 mm-db = { path = "../mm-db" }
+mm-vault = { path = "../mm-vault" }
+bs58 = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
