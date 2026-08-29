@@ -16,7 +16,7 @@ RUN npm ci
 COPY apps/wa-bridge ./
 RUN npm run build
 
-FROM debian:bookworm-slim
+FROM node:20-bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=rust-builder /app/target/release/mm-api ./mm-api
