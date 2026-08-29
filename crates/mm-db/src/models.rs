@@ -164,3 +164,15 @@ pub struct BotStats {
     pub by_intent: Vec<(String, i64)>,
     pub last_14_days: Vec<(String, i64)>,
 }
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FiatPayoutRow { pub id: Uuid, pub user_id: Uuid, pub amount: Decimal, pub currency: String, pub bank_code: String, pub account_number: String, pub account_name: Option<String>, pub provider_ref: Option<String>, pub status: String, pub created_at: DateTime<Utc> }
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct CryptoTransferRow { pub id: Uuid, pub user_id: Uuid, pub chain_type: String, pub token: String, pub amount: Decimal, pub recipient_address: String, pub tx_hash: Option<String>, pub status: String, pub created_at: DateTime<Utc> }
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct AirtimeRow { pub id: Uuid, pub user_id: Uuid, pub recipient_phone: String, pub network: String, pub amount: Decimal, pub purchase_type: String, pub status: String, pub provider_ref: Option<String>, pub created_at: DateTime<Utc> }
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ForeignAccountRow { pub id: Uuid, pub user_id: Uuid, pub currency: String, pub account_number: String, pub provider: String, pub status: String, pub created_at: DateTime<Utc> }

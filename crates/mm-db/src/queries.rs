@@ -999,3 +999,72 @@ pub async fn resolve_bot_interaction(pool: &PgPool, id: Uuid, agent_id: Uuid) ->
     sqlx::query!(r#"UPDATE bot_interactions SET resolved = true, assigned_agent = $2 WHERE id = $1"#, id, agent_id).execute(pool).await?;
     Ok(())
 }
+
+// === Fintech 8-features queries ===
+pub async fn get_user_pin_hash(pool: &PgPool, user_id: Uuid) -> Result<Option<String>, DbError> {
+    Ok(sqlx::query_scalar!(r#"SELECT pin_hash FROM users WHERE id=$1"#, user_id).fetch_optional(pool).await?.flatten())
+}
+pub async fn set_user_pin(pool: &PgPool, user_id: Uuid, hash: &str) -> Result<(), DbError> {
+    sqlx::query!(r#"UPDATE users SET pin_hash=$2, pin_set=true, updated_at=NOW() WHERE id=$1"#, user_id, hash).execute(pool).await?; Ok(())
+}
+pub async fn increment_pin_fail(pool: &PgPool, user_id: Uuid) -> Result<(i32, Option<chrono::DateTime<chrono::Utc>>), DbError> {
+    let row = sqlx::query!(r#"UPDATE users SET failed_pin_attempts = failed_pin_attempts+1, pin_locked_until = CASE WHEN failed_pin_attempts+1 >= 5 THEN NOW() + interval '15 minutes' WHEN failed_pin_attempts+1 >= 3 THEN NOW() + interval '2 minutes' ELSE pin_locked_until END WHERE id=$1 RETURNING failed_pin_attempts, pin_locked_until"#, user_id).fetch_one(pool).await?;
+    Ok((row.failed_pin_attempts, row.pin_locked_until))
+}
+pub async fn reset_pin_attempts(pool: &PgPool, user_id: Uuid) -> Result<(), DbError> {
+    sqlx::query!(r#"UPDATE users SET failed_pin_attempts=0, pin_locked_until=NULL WHERE id=$1"#, user_id).execute(pool).await?; Ok(())
+}
+pub async fn check_velocity(pool: &PgPool, user_id: Uuid, amount_ngn: Decimal) -> Result<bool, DbError> {
+    // daily cap 500k NGN, 5 trades/hour, tx amount cap 200k per single without OTP
+    let hour_count: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "c!" FROM transactions WHERE user_id=$1 AND created_at > NOW() - interval '1 hour'"#, user_id).fetch_one(pool).await?;
+    if hour_count >= 5 { return Ok(false); }
+    let today_sum: Option<Decimal> = sqlx::query_scalar!(r#"SELECT SUM(amount) FROM transactions WHERE user_id=$1 AND currency='NGN' AND created_at >= CURRENT_DATE"# , user_id).fetch_one(pool).await?;
+    let sum = today_sum.unwrap_or(Decimal::ZERO);
+    if sum + amount_ngn > Decimal::from(500_000) { return Ok(false); }
+    Ok(true)
+}
+pub async fn create_fiat_payout(pool: &PgPool, user_id: Uuid, amount: Decimal, bank_code: &str, acct: &str, name: Option<&str>) -> Result<Uuid, DbError> {
+    let row = sqlx::query!(r#"INSERT INTO fiat_payouts (user_id, amount, bank_code, account_number, account_name, provider_ref, status) VALUES ($1,$2,$3,$4,$5,$6,'SUCCESS') RETURNING id"#, user_id, amount, bank_code, acct, name, format!("MOCK-{}", Uuid::new_v4())).fetch_one(pool).await?;
+    // also debit wallet + ledger
+    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, status, metadata) VALUES ($1,'FIAT_PAYOUT','OUTBOUND',$2,'NGN','SUCCESS', jsonb_build_object('bank_code',$3::text,'account',$4::text))"#, user_id, amount, bank_code, acct).execute(pool).await?;
+    sqlx::query!(r#"UPDATE wallets SET balance = balance - $1 WHERE user_id=$2 AND currency='NGN' AND balance >= $1"#, amount, user_id).execute(pool).await?;
+    Ok(row.id)
+}
+pub async fn create_airtime(pool: &PgPool, user_id: Uuid, phone: &str, network: &str, amount: Decimal, ptype: &str) -> Result<Uuid, DbError> {
+    let row = sqlx::query!(r#"INSERT INTO airtime_purchases (user_id, recipient_phone, network, amount, purchase_type, provider_ref) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id"#, user_id, phone, network, amount, ptype, format!("VTU-{}", Uuid::new_v4())).fetch_one(pool).await?;
+    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, status, metadata) VALUES ($1,'AIRTIME','OUTBOUND',$2,'NGN','SUCCESS', jsonb_build_object('network',$3::text,'type',$4::text))"#, user_id, amount, network, ptype).execute(pool).await?;
+    sqlx::query!(r#"UPDATE wallets SET balance = balance - $1 WHERE user_id=$2 AND currency='NGN'"#, amount, user_id).execute(pool).await?;
+    Ok(row.id)
+}
+pub async fn create_crypto_transfer(pool: &PgPool, user_id: Uuid, chain: &str, token: &str, amount: Decimal, to: &str) -> Result<(Uuid,String), DbError> {
+    let hash = format!("0x{}", hex::encode(rand::random::<[u8;32]>()));
+    let h2 = if chain=="SOLANA" { format!("Sol{}", &hash[2..18]) } else { hash.clone() };
+    let row = sqlx::query!(r#"INSERT INTO crypto_transfers (user_id, chain_type, token, amount, recipient_address, tx_hash) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id"#, user_id, chain, token, amount, to, h2.clone()).fetch_one(pool).await?;
+    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, blockchain_tx_hash, status, metadata) VALUES ($1,'CRYPTO_TRANSFER','OUTBOUND',$2,$3,$4,'SUCCESS', jsonb_build_object('chain',$5::text))"#, user_id, amount, token, h2.clone(), chain).execute(pool).await?;
+    Ok((row.id, h2))
+}
+pub async fn atomic_offramp(pool: &PgPool, user_id: Uuid, from_token: &str, to_fiat: &str, amount_token: Decimal, rate: Decimal) -> Result<Uuid, DbError> {
+    let fiat_amount = (amount_token * rate).round_dp(2);
+    // debit token wallet (mock: just ledger), credit NGN
+    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, status, metadata) VALUES ($1,'OFFRAMP','OUTBOUND',$2,$3,'SUCCESS', jsonb_build_object('to_fiat',$4::text,'rate',$5::text))"#, user_id, amount_token, from_token, to_fiat, rate.to_string()).execute(pool).await?;
+    sqlx::query!(r#"INSERT INTO wallets (user_id, wallet_type, currency, balance) VALUES ($1,'FIAT_NGN','NGN',0) ON CONFLICT (user_id,currency) DO NOTHING"#, user_id).execute(pool).await?;
+    sqlx::query!(r#"UPDATE wallets SET balance = balance + $1 WHERE user_id=$2 AND currency='NGN'"#, fiat_amount, user_id).execute(pool).await?;
+    let tx = sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, status, metadata) VALUES ($1,'OFFRAMP_CREDIT','INBOUND',$2,'NGN','SUCCESS', jsonb_build_object('from',$3::text)) RETURNING id"#, user_id, fiat_amount, from_token).fetch_one(pool).await?;
+    Ok(tx.id)
+}
+pub async fn get_crypto_rate(pool: &PgPool, pair: &str) -> Result<Option<Decimal>, DbError> {
+    Ok(sqlx::query_scalar!(r#"SELECT mid_rate FROM fx_rates WHERE pair=$1 ORDER BY fetched_at DESC LIMIT 1"#, pair).fetch_optional(pool).await?)
+}
+pub async fn list_recent_transactions(pool: &PgPool, user_id: Uuid, limit: i64) -> Result<Vec<WalletRow>, DbError> { // reuse for wallets list
+    list_wallets(pool, user_id).await
+}
+pub async fn ensure_foreign_wallet(pool: &PgPool, user_id: Uuid, currency: &str) -> Result<String, DbError> {
+    let wt = format!("FIAT_{}", currency);
+    sqlx::query!(r#"INSERT INTO wallets (user_id, wallet_type, currency, balance) VALUES ($1,$2,$3,0) ON CONFLICT (user_id,currency) DO NOTHING"#, user_id, wt, currency).execute(pool).await?;
+    let acct = format!("{}-MOCK-{}", currency, &user_id.to_string()[..8].to_uppercase());
+    sqlx::query!(r#"INSERT INTO foreign_accounts (user_id, currency, account_number) VALUES ($1,$2,$3) ON CONFLICT (user_id,currency) DO NOTHING"#, user_id, currency, acct.clone()).execute(pool).await?;
+    Ok(acct)
+}
+pub async fn list_foreign_accounts(pool: &PgPool, user_id: Uuid) -> Result<Vec<ForeignAccountRow>, DbError> {
+    Ok(sqlx::query_as::<_, ForeignAccountRow>(r#"SELECT id, user_id, currency, account_number, provider, status, created_at FROM foreign_accounts WHERE user_id=$1"#).bind(user_id).fetch_all(pool).await?)
+}

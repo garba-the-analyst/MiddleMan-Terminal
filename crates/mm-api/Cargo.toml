@@ -28,5 +28,6 @@ mm-db = { path = "../mm-db" }
 mm-vault = { path = "../mm-vault" }
 bs58 = { workspace = true }
 hex = { workspace = true }
+regex = { workspace = true }
 
 [dev-dependencies]

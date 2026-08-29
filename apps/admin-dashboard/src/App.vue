@@ -34,6 +34,8 @@ const allNavigation: NavItem[] = [
   { name: 'Bot Inbox', icon: '💬', category: 'Support' },
   { name: 'Gift Card Trades', icon: '💳', category: 'Trading' },
   { name: 'Price Catalogue', icon: '🏷️', category: 'Trading' },
+  { name: 'Transactions', icon: '🔁', category: 'Finance' },
+  { name: 'Foreign Accounts', icon: '🌍', category: 'Finance' },
   { name: 'Knowledge Base', icon: '📚', category: 'Support' },
   { name: 'Employee Management', icon: '👥', category: 'Super Admin', roles: ['SUPER_ADMIN'] },
   { name: 'Audit Logs', icon: '🛡️', category: 'Super Admin', roles: ['SUPER_ADMIN','OPERATIONS_MANAGER'] },
@@ -49,6 +51,8 @@ const botStats = ref<any>(null)
 const botInteractions = ref<any[]>([])
 const kbItems = ref<any[]>([])
 const kbSearch = ref('')
+const transactions = ref<any[]>([])
+const foreignAccts = ref<any[]>([])
 const employees = ref<any[]>([])
 const selectedImage = ref<string | null>(null)
 const isLive = ref(false)
@@ -86,6 +90,8 @@ async function fetchEmployees() {
   if(!isAuthenticated.value) return
   try { const r = await axios.get('/api/v1/admin/employees', { headers: authHeaders() }); employees.value=r.data } catch {}
 }
+async function fetchTransactions(){ if(!isAuthenticated.value) return; try{ const r=await axios.get('/api/v1/admin/transactions',{headers:authHeaders()}); transactions.value=r.data }catch{} }
+async function fetchForeign(){ if(!isAuthenticated.value) return; try{ const r=await axios.get('/api/v1/admin/foreign-accounts',{headers:authHeaders()}); foreignAccts.value=r.data }catch{} }
 async function fetchKB() {
   try { const r = await axios.get('/api/v1/admin/kb', { params:{ q: kbSearch.value } }); kbItems.value=r.data } catch {}
 }
@@ -94,13 +100,13 @@ async function fetchRoles(){
   try { const r = await axios.get('/api/v1/admin/roles', { headers: authHeaders() }); roles.value=r.data } catch {}
 }
 async function fetchAll(){
-  await Promise.all([fetchDashboard(), fetchBotStats(), fetchBotInteractions(), fetchEmployees(), fetchKB(), fetchRoles()])
+  await Promise.all([fetchDashboard(), fetchBotStats(), fetchBotInteractions(), fetchEmployees(), fetchKB(), fetchRoles(), fetchTransactions(), fetchForeign()])
 }
 
 onMounted(async()=>{
   if(isAuthenticated.value) await fetchAll()
   else await fetchDashboard()
-  pollTimer = window.setInterval(()=>{ fetchDashboard(); fetchBotStats(); }, 5000)
+  pollTimer = window.setInterval(()=>{ fetchDashboard(); fetchBotStats(); fetchTransactions(); }, 5000)
 })
 onUnmounted(()=>{ if(pollTimer) clearInterval(pollTimer) })
 
@@ -292,6 +298,30 @@ async function resolveInteraction(id:string){
         <div v-if="activeTab==='Knowledge Base'" class="space-y-4">
           <input v-model="kbSearch" @input="fetchKB" placeholder="Search knowledge base…" class="w-full px-4 py-3 rounded-lg bg-obsidian-card border border-obsidian-border text-sm"/>
           <div v-for="k in kbItems" :key="k.id" class="bg-obsidian-card border border-obsidian-border rounded-xl p-4"><p class="text-xs px-2 py-1 rounded bg-navy inline-block">{{ k.category }}</p><h4 class="font-semibold mt-2">{{ k.question }}</h4><p class="text-sm text-silver-muted mt-1">{{ k.answer }}</p></div>
+        </div>
+
+        <!-- Transactions -->
+        <div v-if="activeTab==='Transactions'" class="space-y-4">
+          <div class="bg-obsidian-card border rounded-xl overflow-hidden">
+            <table class="w-full text-left text-sm"><thead class="bg-navy-dark text-silver-muted text-xs uppercase"><tr><th class="p-3">Type</th><th class="p-3">Amount</th><th class="p-3">Currency</th><th class="p-3">Status</th><th class="p-3">Time</th></tr></thead>
+              <tbody class="divide-y"><tr v-for="t in transactions" :key="t.id"><td class="p-3">{{ t.tx_type }}</td><td class="p-3 font-mono">{{ t.amount }}</td><td class="p-3">{{ t.currency }}</td><td class="p-3">{{ t.status }}</td><td class="p-3 text-xs">{{ new Date(t.created_at).toLocaleString() }}</td></tr></tbody>
+            </table>
+          </div>
+          <p class="text-xs text-silver-muted">Shows all: P2P, FIAT_PAYOUT (external bank), AIRTIME, CRYPTO_TRANSFER, OFFRAMP, GIFT_CARD_PAYOUT. Filter via DB <code>transactions</code>.</p>
+        </div>
+
+        <!-- Foreign Accounts -->
+        <div v-if="activeTab==='Foreign Accounts'" class="space-y-4">
+          <div class="bg-obsidian-card p-4 rounded-xl border">
+            <p class="text-sm font-semibold">For freelancers & remote workers — mock USD/GBP/EUR virtual accounts (future: Wise/Stripe). Create via WhatsApp: <code>create USD account</code></p>
+            <button @click="fetchForeign" class="mt-2 px-3 py-1 rounded bg-navy text-xs border">Refresh</button>
+          </div>
+          <div class="bg-obsidian-card border rounded-xl overflow-hidden">
+            <table class="w-full text-left text-sm"><thead class="bg-navy-dark text-silver-muted text-xs uppercase"><tr><th class="p-3">User</th><th class="p-3">Currency</th><th class="p-3">Account</th><th class="p-3">Provider</th><th class="p-3">Status</th></tr></thead>
+              <tbody class="divide-y"><tr v-for="f in foreignAccts" :key="f.id"><td class="p-3">{{ f.user }}</td><td class="p-3">{{ f.currency }}</td><td class="p-3 font-mono">{{ f.account }}</td><td class="p-3">{{ f.provider }}</td><td class="p-3">{{ f.status }}</td></tr></tbody>
+            </table>
+          </div>
+          <div class="bg-obsidian-card p-4 rounded-xl border text-xs text-silver-muted">Security: these wallets are <code>wallets(currency=USD/GBP/EUR)</code> + <code>foreign_accounts</code>, isolated per user, provider mock. Real provider adds KYC gate <code>users.kyc_status</code>.<br/>WhatsApp security: PIN 4-6 digits (Argon2id), cached 15min, step-up OTP for &gt;₦100k, velocity 5/h &amp; ₦500k/day, lockout 2min/15min, Redis <code>pin_ok:</code>/<code>otp:</code>, all keys AES-256-GCM.</div>
         </div>
 
         <!-- Employees -->

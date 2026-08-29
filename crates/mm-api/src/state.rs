@@ -13,6 +13,12 @@ pub struct AppState {
 }
 
 impl AppState {
+    pub async fn get_user_pin_hash(state: &AppState, user_id: uuid::Uuid) -> Option<String> {
+        mm_db::queries::get_user_pin_hash(&state.pool, user_id).await.ok().flatten()
+    }
+    pub async fn reset_pin_attempts(state: &AppState, user_id: uuid::Uuid) {
+        let _ = mm_db::queries::reset_pin_attempts(&state.pool, user_id).await;
+    }
     pub async fn connect(cfg: Config) -> anyhow::Result<Self> {
         let redis_client = redis::Client::open(cfg.redis_url.clone())?;
         let ai = GeminiParser::new(cfg.gemini_api_key.clone().unwrap_or_default());

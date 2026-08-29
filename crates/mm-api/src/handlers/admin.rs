@@ -5,6 +5,7 @@ use axum::{
     Json,
 };
 use mm_db::{queries as db, ResolveAction};
+use sqlx;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -742,4 +743,23 @@ pub async fn kb_search(
     };
     let json: Vec<serde_json::Value> = rows.into_iter().map(|r| serde_json::json!({"id":r.id,"category":r.category,"question":r.question,"answer":r.answer,"priority":r.priority})).collect();
     Ok(Json(json))
+}
+
+pub async fn transactions_recent(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<serde_json::Value>>, StatusCode> {
+    let emp_id = authorize_employee(&state, &headers).await?;
+    check_permission(&state, emp_id, "trades.read").await?;
+    let rows = sqlx::query!(r#"SELECT id, user_id, tx_type, amount, currency, status, created_at FROM transactions ORDER BY created_at DESC LIMIT 50"#).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows.into_iter().map(|r| serde_json::json!({"id":r.id,"user_id":r.user_id,"tx_type":r.tx_type,"amount":r.amount,"currency":r.currency,"status":r.status,"created_at":r.created_at.to_rfc3339()})).collect()))
+}
+pub async fn foreign_accounts_all(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<serde_json::Value>>, StatusCode> {
+    let emp_id = authorize_employee(&state, &headers).await?;
+    check_permission(&state, emp_id, "analytics.read").await?;
+    let rows = sqlx::query!(r#"SELECT fa.id, fa.user_id, u.whatsapp_number, fa.currency, fa.account_number, fa.provider, fa.status FROM foreign_accounts fa JOIN users u ON u.id=fa.user_id ORDER BY fa.created_at DESC LIMIT 50"#).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows.into_iter().map(|r| serde_json::json!({"id":r.id,"user":r.whatsapp_number,"currency":r.currency,"account":r.account_number,"provider":r.provider,"status":r.status})).collect()))
 }

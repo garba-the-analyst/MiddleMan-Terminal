@@ -127,7 +127,7 @@ fn response_schema_json() -> serde_json::Value {
             "intent": { "type": "STRING", "enum": [
                 "REGISTER_USER","LIQUIDATE_GIFT_CARD","CHECK_BALANCE","EXECUTE_DEX_SWAP",
                 "P2P_TRANSFER","OPEN_PERP_POSITION","TRANSFER_FIAT","BUY_AIRTIME",
-                "CHECK_CONTRACT_SECURITY","HELP","UNKNOWN"] },
+                "CHECK_CONTRACT_SECURITY","HELP","UNKNOWN","SET_PIN","CREATE_FOREIGN_ACCOUNT"] },
             "confidence": { "type": "NUMBER" },
             "entities": {
                 "type": "OBJECT",

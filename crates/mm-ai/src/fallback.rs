@@ -10,12 +10,15 @@ static RE_GIFT: Lazy<Regex> =
 static RE_P2P: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)\b(send|transfer)\b.*\+?234\d{10}").unwrap());
 static RE_AIRTIME: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\b(airtime|data|mtn|airtel|glo|9mobile)\b").unwrap());
+    Lazy::new(|| Regex::new(r"(?i)\b(airtime|data|mtn|airtel|glo|9mobile|utility|electricity|bill)\b").unwrap());
 static RE_AMOUNT: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)(?:^|\s)(?:₦|\$)?(\d[\d,]*(?:\.\d+)?)").unwrap());
 static RE_CONTRACT: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})").unwrap());
 static RE_PHONE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\+234\d{10}").unwrap());
+static RE_FIAT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(\b\d{10}\b.*\b(gtb|access|uba|firstbank|zenith|opay|palmpay|bank|account)\b|\b(gtb|access|uba|firstbank|zenith|opay|palmpay|bank|account)\b.*\b\d{10}\b|\btransfer\b.*\b\d{10}\b)").unwrap());
+static RE_FOREIGN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(create|open)\s+(usd|gbp|eur)\s+account\b").unwrap());
+static RE_CREATE_WALLET: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^\s*pin\s*\d{4,6}\s*$").unwrap());
 
 const KNOWN_BRANDS: [&str; 7] = [
     "STEAM",
@@ -120,6 +123,10 @@ pub fn rulebook_parse(raw_text: &str) -> crate::parser::ParsedIntent {
                 ..empty_entities()
             },
         )
+    } else if RE_FOREIGN.is_match(text) {
+        ("CREATE_FOREIGN_ACCOUNT", empty_entities())
+    } else if RE_FIAT.is_match(text) {
+        ("TRANSFER_FIAT", Entities { amount, ..empty_entities() })
     } else if RE_BALANCE.is_match(text) {
         ("CHECK_BALANCE", empty_entities())
     } else if RE_AIRTIME.is_match(text) {
@@ -127,6 +134,8 @@ pub fn rulebook_parse(raw_text: &str) -> crate::parser::ParsedIntent {
             "BUY_AIRTIME",
             Entities { amount, network: network_of(text), ..empty_entities() },
         )
+    } else if RE_CREATE_WALLET.is_match(text) {
+        ("SET_PIN", empty_entities())
     } else if contract.is_some() {
         (
             "CHECK_CONTRACT_SECURITY",

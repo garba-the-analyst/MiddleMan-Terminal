@@ -2,6 +2,7 @@ mod config;
 mod fsm;
 mod handlers;
 mod outbound;
+mod security;
 mod state;
 mod wallet;
 mod worker;
@@ -10,7 +11,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use handlers::admin::{bot_interactions, bot_resolve_interaction, bot_stats, create_catalogue, create_employee, dashboard, delete_catalogue, delete_employee, get_analytics, get_employee, get_roles, kb_search, list_employees, login, resolve_trade, track_metric, update_catalogue, update_employee};
+use handlers::admin::{bot_interactions, bot_resolve_interaction, bot_stats, create_catalogue, create_employee, dashboard, delete_catalogue, delete_employee, foreign_accounts_all, get_analytics, get_employee, get_roles, kb_search, list_employees, login, resolve_trade, track_metric, transactions_recent, update_catalogue, update_employee};
 use state::AppState;
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::cors::{Any, CorsLayer};
@@ -67,6 +68,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/admin/bot/interactions", get(bot_interactions))
         .route("/api/v1/admin/bot/interactions/:id/resolve", post(bot_resolve_interaction))
         .route("/api/v1/admin/kb", get(kb_search))
+        .route("/api/v1/admin/transactions", get(transactions_recent))
+        .route("/api/v1/admin/foreign-accounts", get(foreign_accounts_all))
         // Roles
         .route("/api/v1/admin/roles", get(get_roles))
         // Debug
