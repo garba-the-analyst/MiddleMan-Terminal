@@ -1,23 +1,27 @@
-# Use the official Puppeteer image (comes with Chrome pre-installed!)
-FROM ghcr.io/puppeteer/puppeteer:latest
+# MiddleMan — Fly.io single-image (mm-api + wa-bridge)
+FROM rust:1.78-bookworm AS rust-builder
+WORKDIR /app
+RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY migrations ./migrations
+RUN cargo build --release -p mm-api
 
-# Tell Puppeteer to use the pre-installed Chrome
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+FROM node:20-bookworm AS node-builder
+WORKDIR /app/apps/wa-bridge
+COPY apps/wa-bridge/package*.json ./
+RUN npm ci
+COPY apps/wa-bridge ./
+RUN npm run build
 
-# Create app directory
-WORKDIR /usr/src/app
-
-# Copy package files (Switch to the root user temporarily to avoid permission errors)
-USER root
-COPY package*.json ./
-RUN npm install
-
-# Copy the rest of the application code
-COPY . .
-
-# Hugging Face REQUIRES your web server to listen on port 7860
-EXPOSE 7860
-
-# Start the bot
-CMD ["node", "server.js"]
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=rust-builder /app/target/release/mm-api ./mm-api
+COPY --from=node-builder /app/apps/wa-bridge/dist ./wa-bridge/dist
+COPY --from=node-builder /app/apps/wa-bridge/node_modules ./wa-bridge/node_modules
+COPY --from=node-builder /app/apps/wa-bridge/package.json ./wa-bridge/package.json
+COPY migrations ./migrations
+ENV NODE_ENV=production
+EXPOSE 8080 3001
+CMD sh -c "./mm-api & node wa-bridge/dist/index.js & wait"

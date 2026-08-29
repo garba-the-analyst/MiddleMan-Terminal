@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 // ===== Auth =====
 const token = ref<string>(localStorage.getItem('mm_admin_token') || '')
@@ -16,7 +17,7 @@ function authHeaders() { return token.value ? { 'x-admin-token': token.value } :
 async function doLogin() {
   loginError.value = '' ; loginLoading.value = true
   try {
-    const r = await axios.post('/api/v1/admin/login', { email: loginEmail.value, password: loginPassword.value })
+    const r = await axios.post(`${API_BASE}/api/v1/admin/login`, { email: loginEmail.value, password: loginPassword.value })
     token.value = r.data.token
     currentUser.value = r.data.employee
     localStorage.setItem('mm_admin_token', token.value)
@@ -75,7 +76,7 @@ const roles = ref<any[]>([])
 async function fetchDashboard() {
   try {
     const h = isAuthenticated.value ? { headers: authHeaders() } : undefined
-    const r = await axios.get('/api/v1/admin/dashboard', h as any)
+    const r = await axios.get(`${API_BASE}/api/v1/admin/dashboard`, h as any)
     giftcardTrades.value = r.data.trades || []
     dashboardStats.value = r.data.stats || { activeUsers:0, pendingCards:0, todayVolume:'₦0' }
     if (r.data.catalogue) priceCatalogue.value = r.data.catalogue
@@ -84,28 +85,28 @@ async function fetchDashboard() {
 }
 async function fetchBotStats() {
   if(!isAuthenticated.value) return
-  try { const r = await axios.get('/api/v1/admin/bot/stats', { headers: authHeaders() }); botStats.value = r.data } catch {}
+  try { const r = await axios.get(`${API_BASE}/api/v1/admin/bot/stats`, { headers: authHeaders() }); botStats.value = r.data } catch {}
 }
 async function fetchBotInteractions(escalatedOnly=false) {
   if(!isAuthenticated.value) return
-  try { const r = await axios.get('/api/v1/admin/bot/interactions', { headers: authHeaders(), params:{ limit:50, escalated_only: escalatedOnly }}); botInteractions.value=r.data } catch {}
+  try { const r = await axios.get(`${API_BASE}/api/v1/admin/bot/interactions`, { headers: authHeaders(), params:{ limit:50, escalated_only: escalatedOnly }}); botInteractions.value=r.data } catch {}
 }
 async function fetchEmployees() {
   if(!isAuthenticated.value) return
-  try { const r = await axios.get('/api/v1/admin/employees', { headers: authHeaders() }); employees.value=r.data } catch {}
+  try { const r = await axios.get(`${API_BASE}/api/v1/admin/employees`, { headers: authHeaders() }); employees.value=r.data } catch {}
 }
-async function fetchTransactions(){ if(!isAuthenticated.value) return; try{ const r=await axios.get('/api/v1/admin/transactions',{headers:authHeaders()}); transactions.value=r.data }catch{} }
-async function fetchForeign(){ if(!isAuthenticated.value) return; try{ const r=await axios.get('/api/v1/admin/foreign-accounts',{headers:authHeaders()}); foreignAccts.value=r.data }catch{} }
-async function fetchFees(){ if(!isAuthenticated.value) return; try{ const r=await axios.get('/api/v1/admin/fees',{headers:authHeaders()}); fees.value=r.data }catch{} }
-async function fetchRates(){ if(!isAuthenticated.value) return; try{ const r=await axios.get('/api/v1/admin/rates',{headers:authHeaders()}); rates.value=r.data }catch{} }
-async function refreshRates(){ if(!isAuthenticated.value) return; try{ await axios.post('/api/v1/admin/rates/refresh',{}, {headers:authHeaders()}); await fetchRates() }catch(e:any){ alert(e?.response?.data?.error||'Failed') } }
-async function saveFee(f:any){ try{ await axios.post(`/api/v1/admin/fees/${f.fee_type}`, {fixed_amount: Number(f.fixed), percent: Number(f.percent), is_active: f.active}, {headers:authHeaders()}); await fetchFees() }catch(e:any){ alert(e?.response?.data?.error||'Failed') } }
+async function fetchTransactions(){ if(!isAuthenticated.value) return; try{ const r=await axios.get(`${API_BASE}/api/v1/admin/transactions`,{headers:authHeaders()}); transactions.value=r.data }catch{} }
+async function fetchForeign(){ if(!isAuthenticated.value) return; try{ const r=await axios.get(`${API_BASE}/api/v1/admin/foreign-accounts`,{headers:authHeaders()}); foreignAccts.value=r.data }catch{} }
+async function fetchFees(){ if(!isAuthenticated.value) return; try{ const r=await axios.get(`${API_BASE}/api/v1/admin/fees`,{headers:authHeaders()}); fees.value=r.data }catch{} }
+async function fetchRates(){ if(!isAuthenticated.value) return; try{ const r=await axios.get(`${API_BASE}/api/v1/admin/rates`,{headers:authHeaders()}); rates.value=r.data }catch{} }
+async function refreshRates(){ if(!isAuthenticated.value) return; try{ await axios.post(`${API_BASE}/api/v1/admin/rates/refresh`,{}, {headers:authHeaders()}); await fetchRates() }catch(e:any){ alert(e?.response?.data?.error||'Failed') } }
+async function saveFee(f:any){ try{ await axios.post(`${API_BASE}/api/v1/admin/fees/${f.fee_type}`, {fixed_amount: Number(f.fixed), percent: Number(f.percent), is_active: f.active}, {headers:authHeaders()}); await fetchFees() }catch(e:any){ alert(e?.response?.data?.error||'Failed') } }
 async function fetchKB() {
-  try { const r = await axios.get('/api/v1/admin/kb', { params:{ q: kbSearch.value } }); kbItems.value=r.data } catch {}
+  try { const r = await axios.get(`${API_BASE}/api/v1/admin/kb`, { params:{ q: kbSearch.value } }); kbItems.value=r.data } catch {}
 }
 async function fetchRoles(){
   if(!isAuthenticated.value) return
-  try { const r = await axios.get('/api/v1/admin/roles', { headers: authHeaders() }); roles.value=r.data } catch {}
+  try { const r = await axios.get(`${API_BASE}/api/v1/admin/roles`, { headers: authHeaders() }); roles.value=r.data } catch {}
 }
 async function fetchAll(){
   await Promise.all([fetchDashboard(), fetchBotStats(), fetchBotInteractions(), fetchEmployees(), fetchKB(), fetchRoles(), fetchTransactions(), fetchForeign(), fetchFees(), fetchRates()])
@@ -124,31 +125,31 @@ const resolveTrade = async(trade:any, status:string)=>{
   if(status==='Rejected'||status==='reject'){ const inp=window.prompt('Rejection reason:','Card has already been redeemed.'); if(inp===null) return; reason=inp }
   const orig=trade.status; trade.status='Processing...'
   try{
-    await axios.post(`/api/v1/admin/trades/${trade.db_id}/resolve`, { status, action: status.toLowerCase(), reason }, { headers: authHeaders() })
+    await axios.post(`${API_BASE}/api/v1/admin/trades/${trade.db_id}/resolve`, { status, action: status.toLowerCase(), reason }, { headers: authHeaders() })
     trade.status = status.toLowerCase().includes('approve') ? 'Approved' : 'Rejected'
     setTimeout(fetchDashboard, 800)
   }catch(e:any){ alert(e?.response?.data?.error||'Failed'); trade.status=orig }
 }
 async function createCatalogue(){
-  try{ await axios.post('/api/v1/admin/catalogue', { brand:newCat.value.brand, country:newCat.value.country, card_format:newCat.value.card_format, rate_per_dollar: Number(newCat.value.rate_per_dollar), active:newCat.value.active }, { headers: authHeaders() }); showCatCreate.value=false; newCat.value={brand:'',country:'US',card_format:'PHYSICAL',rate_per_dollar:0,active:true}; await fetchDashboard() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
+  try{ await axios.post(`${API_BASE}/api/v1/admin/catalogue`, { brand:newCat.value.brand, country:newCat.value.country, card_format:newCat.value.card_format, rate_per_dollar: Number(newCat.value.rate_per_dollar), active:newCat.value.active }, { headers: authHeaders() }); showCatCreate.value=false; newCat.value={brand:'',country:'US',card_format:'PHYSICAL',rate_per_dollar:0,active:true}; await fetchDashboard() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
 }
 async function deleteCatalogue(id:number){
   if(!confirm('Delete catalogue entry?')) return
-  try{ await axios.delete(`/api/v1/admin/catalogue/${id}`, { headers: authHeaders() }); await fetchDashboard() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
+  try{ await axios.delete(`${API_BASE}/api/v1/admin/catalogue/${id}`, { headers: authHeaders() }); await fetchDashboard() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
 }
 async function saveEditCat(){
   if(!editingCat.value) return
-  try{ await axios.post(`/api/v1/admin/catalogue/${editingCat.value.id}`, { brand:editingCat.value.brand, country:editingCat.value.country, card_format:editingCat.value.type||editingCat.value.card_format, rate_per_dollar: Number(editingCat.value.ratePerDollar), active: editingCat.value.status==='Active' }, { headers: authHeaders() }); editingCat.value=null; await fetchDashboard() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
+  try{ await axios.post(`${API_BASE}/api/v1/admin/catalogue/${editingCat.value.id}`, { brand:editingCat.value.brand, country:editingCat.value.country, card_format:editingCat.value.type||editingCat.value.card_format, rate_per_dollar: Number(editingCat.value.ratePerDollar), active: editingCat.value.status==='Active' }, { headers: authHeaders() }); editingCat.value=null; await fetchDashboard() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
 }
 async function createEmployee(){
-  try{ await axios.post('/api/v1/admin/employees', newEmp.value, { headers: authHeaders() }); showEmpCreate.value=false; newEmp.value={email:'',password:'',full_name:'',role:'SUPPORT_AGENT'}; await fetchEmployees() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
+  try{ await axios.post(`${API_BASE}/api/v1/admin/employees`, newEmp.value, { headers: authHeaders() }); showEmpCreate.value=false; newEmp.value={email:'',password:'',full_name:'',role:'SUPPORT_AGENT'}; await fetchEmployees() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
 }
 async function deleteEmployee(id:string){
   if(!confirm('Deactivate employee?')) return
-  try{ await axios.delete(`/api/v1/admin/employees/${id}`, { headers: authHeaders() }); await fetchEmployees() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
+  try{ await axios.delete(`${API_BASE}/api/v1/admin/employees/${id}`, { headers: authHeaders() }); await fetchEmployees() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
 }
 async function resolveInteraction(id:string){
-  try{ await axios.post(`/api/v1/admin/bot/interactions/${id}/resolve`, {}, { headers: authHeaders() }); await fetchBotInteractions() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
+  try{ await axios.post(`${API_BASE}/api/v1/admin/bot/interactions/${id}/resolve`, {}, { headers: authHeaders() }); await fetchBotInteractions() }catch(e:any){ alert(e?.response?.data?.error||'Failed') }
 }
 </script>
 
