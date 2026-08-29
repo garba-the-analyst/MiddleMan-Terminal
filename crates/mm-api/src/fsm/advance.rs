@@ -415,20 +415,24 @@ async fn handle_fiat_payout(state: &AppState, user_id: &Uuid, jid: &str, input: 
     let bank_code = if input.text.to_lowercase().contains("gtb") { "058" } else if input.text.to_lowercase().contains("access") { "044" } else if input.text.to_lowercase().contains("uba") { "033" } else { "044" };
     let acct = regex::Regex::new(r"\b\d{10}\b").unwrap().find(&input.text).map(|m| m.as_str().to_string()).unwrap_or_else(|| "0123456789".into());
     let wa = jid.trim_end_matches("@s.whatsapp.net");
-    if amount >= Decimal::from(10_000) && !crate::security::is_pin_ok_cached(state, wa).await {
-        return reply(state, jid, &format!("🔐 External payout ₦{} to {} ({}). Send `pin 1234` to confirm.", amount, acct, bank_code)).await;
-    }
-    if amount >= Decimal::from(100_000) {
-        let otp = crate::security::generate_otp(state, wa).await;
-        return reply(state, jid, &format!("🔐 Large payout — OTP {} sent (mock). Reply 6 digits to confirm.", otp)).await;
+    if amount >= Decimal::from(10_000) {
+        match crate::security::require_pin(state, *user_id, wa, amount, &input.text).await {
+            Ok(true) => {},
+            Ok(false) => return reply(state, jid, "🔐 PIN required").await,
+            Err(msg) => return reply(state, jid, &msg).await,
+        }
+        if amount >= Decimal::from(100_000) && crate::security::extract_otp(&input.text).is_none() {
+            let otp = crate::security::generate_otp(state, wa).await;
+            return reply(state, jid, &format!("🔐 Large payout — OTP {} sent (mock). Reply 6 digits to confirm.", otp)).await;
+        }
     }
     let bal = db::ensure_ngn_wallet(&state.pool, *user_id).await.map_err(|e| FsmError::Retry(e.to_string()))?;
     if bal < amount { return reply(state, jid, &format!("❌ Balance ₦{} insufficient for ₦{}.", bal, amount)).await; }
     if !db::check_velocity(&state.pool, *user_id, amount).await.map_err(|e| FsmError::Retry(e.to_string()))? {
         return reply(state, jid, "⚠️ Velocity limit.").await;
     }
-    let id = db::create_fiat_payout(&state.pool, *user_id, amount, bank_code, &acct, None).await.map_err(|e| FsmError::Retry(e.to_string()))?;
-    reply(state, jid, &format!("✅ Payout ₦{} → {} ({}) queued. Ref: {}. Bal: ₦{}", amount, acct, bank_code, &id.to_string()[..8], bal - amount)).await
+    let (id, fee) = db::create_fiat_payout(&state.pool, *user_id, amount, bank_code, &acct, None).await.map_err(|e| FsmError::Retry(e.to_string()))?;
+    reply(state, jid, &format!("✅ Payout ₦{} → {} ({}) queued. Fee ₦{} (platform). Ref: {}. Bal: ₦{}", amount, acct, bank_code, fee, &id.to_string()[..8], bal - amount - fee)).await
 }
 
 async fn handle_airtime(state: &AppState, user_id: &Uuid, jid: &str, _input: &FsmInput, parsed: &mm_ai::parser::ParsedIntent) -> Result<(), FsmError> {
@@ -438,8 +442,8 @@ async fn handle_airtime(state: &AppState, user_id: &Uuid, jid: &str, _input: &Fs
     let recipient = parsed.entities.recipient_phone.clone().unwrap_or_else(|| jid.trim_end_matches("@s.whatsapp.net").to_string());
     let bal = db::ensure_ngn_wallet(&state.pool, *user_id).await.map_err(|e| FsmError::Retry(e.to_string()))?;
     if bal < amount { return reply(state, jid, &format!("❌ Balance ₦{} < ₦{}", bal, amount)).await; }
-    let id = db::create_airtime(&state.pool, *user_id, &recipient, &network, amount, "AIRTIME").await.map_err(|e| FsmError::Retry(e.to_string()))?;
-    reply(state, jid, &format!("✅ Airtime ₦{} {} → {}. Ref: {}", amount, network, recipient, &id.to_string()[..8])).await
+    let (id, fee) = db::create_airtime(&state.pool, *user_id, &recipient, &network, amount, "AIRTIME").await.map_err(|e| FsmError::Retry(e.to_string()))?;
+    reply(state, jid, &format!("✅ Airtime ₦{} {} → {}. Fee ₦{}. Ref: {}", amount, network, recipient, fee, &id.to_string()[..8])).await
 }
 
 async fn handle_swap_offramp(state: &AppState, user_id: &Uuid, jid: &str, _input: &FsmInput, parsed: &mm_ai::parser::ParsedIntent) -> Result<(), FsmError> {
@@ -451,32 +455,38 @@ async fn handle_swap_offramp(state: &AppState, user_id: &Uuid, jid: &str, _input
     if dst.to_uppercase()=="NGN" {
         let pair = format!("{}/NGN", src.to_uppercase());
         let rate = db::get_crypto_rate(&state.pool, &pair).await.map_err(|e| FsmError::Retry(e.to_string()))?.unwrap_or(Decimal::from(85000));
-        let tx = db::atomic_offramp(&state.pool, *user_id, &src, "NGN", amount, rate).await.map_err(|e| FsmError::Retry(e.to_string()))?;
-        return reply(state, jid, &format!("✅ Offramp {} {} → ₦{} @ ₦{}/{} . Ref: {}", amount, src, (amount*rate).round_dp(2), rate, src, &tx.to_string()[..8])).await;
+        let (tx, fee) = db::atomic_offramp(&state.pool, *user_id, &src, "NGN", amount, rate).await.map_err(|e| FsmError::Retry(e.to_string()))?;
+        return reply(state, jid, &format!("✅ Offramp {} {} → ₦{} @ ₦{}/{} . Fee ₦{}. Ref: {}", amount, src, (amount*rate).round_dp(2), rate, src, fee, &tx.to_string()[..8])).await;
     }
     // onchain crypto transfer if recipient_address present
     if let Some(to) = parsed.entities.recipient_address.clone() {
         let chain = if to.starts_with("0x") { "EVM" } else { "SOLANA" };
-        let (id, hash) = db::create_crypto_transfer(&state.pool, *user_id, chain, &src, amount, &to).await.map_err(|e| FsmError::Retry(e.to_string()))?;
-        return reply(state, jid, &format!("✅ Crypto {} {} → {} ({}) . Hash: {} Ref: {}", amount, src, &to[..12.min(to.len())], chain, &hash[..12], &id.to_string()[..8])).await;
+        let (id, hash, fee) = db::create_crypto_transfer(&state.pool, *user_id, chain, &src, amount, &to).await.map_err(|e| FsmError::Retry(e.to_string()))?;
+        return reply(state, jid, &format!("✅ Crypto {} {} → {} ({}) . Fee ₦{} + gas. Hash: {} Ref: {}", amount, src, &to[..12.min(to.len())], chain, fee, &hash[..12], &id.to_string()[..8])).await;
     }
     // fiat->crypto onramp
     if src.to_uppercase()=="NGN" {
         let pair = format!("{}/NGN", dst.to_uppercase());
         let rate = db::get_crypto_rate(&state.pool, &pair).await.map_err(|e| FsmError::Retry(e.to_string()))?.unwrap_or(Decimal::from(1600));
         let token_amt = (amount / rate).round_dp(6);
-        let tx = db::atomic_offramp(&state.pool, *user_id, "NGN", &dst, amount, Decimal::ONE/rate).await.map_err(|e| FsmError::Retry(e.to_string()))?;
-        return reply(state, jid, &format!("✅ Onramp ₦{} → {} {} @ ₦{}/{} Ref: {}", amount, token_amt, dst, rate, dst, &tx.to_string()[..8])).await;
+        let (tx, fee) = db::atomic_offramp(&state.pool, *user_id, "NGN", &dst, amount, Decimal::ONE/rate).await.map_err(|e| FsmError::Retry(e.to_string()))?;
+        return reply(state, jid, &format!("✅ Onramp ₦{} → {} {} @ ₦{}/{} Fee ₦{} Ref: {}", amount, token_amt, dst, rate, dst, fee, &tx.to_string()[..8])).await;
     }
-    reply(state, jid, &format!("🔄 Swap {} {} → {} queued (mock DexScreener/Raydium).", amount, src, dst)).await
+    let is_degen = ["PEPE","BONK","WIF","MEME","SHIB"].iter().any(|m| src.to_uppercase().contains(m) || dst.to_uppercase().contains(m));
+    let fee_type = if is_degen { "DEGEN" } else { "SPOT" };
+    let fee = db::platform_fee_for(&state.pool, fee_type, amount).await.unwrap_or(rust_decimal::Decimal::ZERO);
+    sqlx::query!("INSERT INTO transactions (user_id, tx_type, direction, amount, currency, fee_amount, status, metadata) VALUES ($1,$2,'OUTBOUND',$3,$4,$5,'SUCCESS', jsonb_build_object('pair',$6::text,'fee_type',$7::text))", user_id, fee_type, amount, src, fee, format!("{}->{}", src, dst), fee_type).execute(&state.pool).await.map_err(|e| FsmError::Retry(e.to_string()))?;
+    reply(state, jid, &format!("🔄 Swap {} {} → {} queued ({} via DexScreener/Raydium). Fee {} {} ({}).", amount, src, dst, fee_type, fee, src, fee_type)).await
 }
 
 async fn handle_perp(state: &AppState, user_id: &Uuid, jid: &str, parsed: &mm_ai::parser::ParsedIntent) -> Result<(), FsmError> {
     let pair = parsed.entities.source_currency.clone().unwrap_or_else(|| "SOL/USDT".into());
     let amount = Decimal::try_from(parsed.entities.amount.unwrap_or(100.0)).unwrap_or(Decimal::from(100));
     // degen: use DexScreener mock trending check
+    let fee = db::platform_fee_for(&state.pool, "FUTURES", amount).await.map_err(|e| FsmError::Retry(e.to_string()))?;
     let row = sqlx::query!("INSERT INTO active_positions (user_id, protocol, market_pair, side, leverage, margin_usd, entry_price, liquidation_price, status) VALUES ($1,'raydium',$2,'LONG',5,$3,100,90,'OPEN') RETURNING id", user_id, pair, amount).fetch_one(&state.pool).await.map_err(|e| FsmError::Retry(e.to_string()))?;
-    reply(state, jid, &format!("📈 Perp {} x5 opened. Margin ${} liq 90. ID: {} (degen via Raydium/DexScreener mock).", pair, amount, &row.id.to_string()[..8])).await
+    sqlx::query!("INSERT INTO transactions (user_id, tx_type, direction, amount, currency, fee_amount, status, metadata) VALUES ($1,'FUTURES','OUTBOUND',$2,'USD',$3,'SUCCESS', jsonb_build_object('pair',$4::text,'fee',$5::text))", user_id, amount, fee, pair, fee.to_string()).execute(&state.pool).await.map_err(|e| FsmError::Retry(e.to_string()))?;
+    reply(state, jid, &format!("📈 Perp {} x5 opened. Margin ${} fee ${} (1%). Liq 90. ID: {}.", pair, amount, fee, &row.id.to_string()[..8])).await
 }
 async fn handle_set_pin(state: &AppState, user_id: &Uuid, jid: &str, input: &FsmInput) -> Result<(), FsmError> {
     if let Some(pin) = crate::security::extract_pin(&input.text) {

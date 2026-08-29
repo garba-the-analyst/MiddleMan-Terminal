@@ -1023,34 +1023,47 @@ pub async fn check_velocity(pool: &PgPool, user_id: Uuid, amount_ngn: Decimal) -
     if sum + amount_ngn > Decimal::from(500_000) { return Ok(false); }
     Ok(true)
 }
-pub async fn create_fiat_payout(pool: &PgPool, user_id: Uuid, amount: Decimal, bank_code: &str, acct: &str, name: Option<&str>) -> Result<Uuid, DbError> {
+pub async fn platform_fee_for(pool: &PgPool, fee_type: &str, amount: Decimal) -> Result<Decimal, DbError> {
+    let fee: Option<Decimal> = sqlx::query_scalar!(r#"SELECT calc_platform_fee($1,$2)"#, fee_type, amount).fetch_one(pool).await?;
+    Ok(fee.unwrap_or(Decimal::ZERO))
+}
+pub async fn create_fiat_payout(pool: &PgPool, user_id: Uuid, amount: Decimal, bank_code: &str, acct: &str, name: Option<&str>) -> Result<(Uuid, Decimal), DbError> {
+    let fee = platform_fee_for(pool, "FIAT_PAYOUT", amount).await?;
+    let total = amount + fee;
     let row = sqlx::query!(r#"INSERT INTO fiat_payouts (user_id, amount, bank_code, account_number, account_name, provider_ref, status) VALUES ($1,$2,$3,$4,$5,$6,'SUCCESS') RETURNING id"#, user_id, amount, bank_code, acct, name, format!("MOCK-{}", Uuid::new_v4())).fetch_one(pool).await?;
-    // also debit wallet + ledger
-    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, status, metadata) VALUES ($1,'FIAT_PAYOUT','OUTBOUND',$2,'NGN','SUCCESS', jsonb_build_object('bank_code',$3::text,'account',$4::text))"#, user_id, amount, bank_code, acct).execute(pool).await?;
-    sqlx::query!(r#"UPDATE wallets SET balance = balance - $1 WHERE user_id=$2 AND currency='NGN' AND balance >= $1"#, amount, user_id).execute(pool).await?;
-    Ok(row.id)
+    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, fee_amount, status, metadata) VALUES ($1,'FIAT_PAYOUT','OUTBOUND',$2,'NGN',$3,'SUCCESS', jsonb_build_object('bank_code',$4::text,'account',$5::text,'fee',$6::text))"#, user_id, amount, fee, bank_code, acct, fee.to_string()).execute(pool).await?;
+    sqlx::query!(r#"UPDATE wallets SET balance = balance - $1 WHERE user_id=$2 AND currency='NGN' AND balance >= $1"#, total, user_id).execute(pool).await?;
+    Ok((row.id, fee))
 }
-pub async fn create_airtime(pool: &PgPool, user_id: Uuid, phone: &str, network: &str, amount: Decimal, ptype: &str) -> Result<Uuid, DbError> {
+pub async fn create_airtime(pool: &PgPool, user_id: Uuid, phone: &str, network: &str, amount: Decimal, ptype: &str) -> Result<(Uuid, Decimal), DbError> {
+    let fee_type = if ptype=="DATA" { "DATA" } else if ptype=="UTILITY" { "UTILITY" } else { "AIRTIME" };
+    let fee = platform_fee_for(pool, fee_type, amount).await?;
+    let total = amount + fee;
     let row = sqlx::query!(r#"INSERT INTO airtime_purchases (user_id, recipient_phone, network, amount, purchase_type, provider_ref) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id"#, user_id, phone, network, amount, ptype, format!("VTU-{}", Uuid::new_v4())).fetch_one(pool).await?;
-    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, status, metadata) VALUES ($1,'AIRTIME','OUTBOUND',$2,'NGN','SUCCESS', jsonb_build_object('network',$3::text,'type',$4::text))"#, user_id, amount, network, ptype).execute(pool).await?;
-    sqlx::query!(r#"UPDATE wallets SET balance = balance - $1 WHERE user_id=$2 AND currency='NGN'"#, amount, user_id).execute(pool).await?;
-    Ok(row.id)
+    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, fee_amount, status, metadata) VALUES ($1,$2,'OUTBOUND',$3,'NGN',$4,'SUCCESS', jsonb_build_object('network',$5::text,'type',$6::text,'fee',$7::text))"#, user_id, ptype, amount, fee, network, ptype, fee.to_string()).execute(pool).await?;
+    sqlx::query!(r#"UPDATE wallets SET balance = balance - $1 WHERE user_id=$2 AND currency='NGN'"#, total, user_id).execute(pool).await?;
+    Ok((row.id, fee))
 }
-pub async fn create_crypto_transfer(pool: &PgPool, user_id: Uuid, chain: &str, token: &str, amount: Decimal, to: &str) -> Result<(Uuid,String), DbError> {
+pub async fn create_crypto_transfer(pool: &PgPool, user_id: Uuid, chain: &str, token: &str, amount: Decimal, to: &str) -> Result<(Uuid,String,Decimal), DbError> {
+    let fee = platform_fee_for(pool, "CRYPTO_TRANSFER", amount).await?;
+    // gas is separate; we add platform fee on top (for demo NGN-equiv, store as metadata)
     let hash = format!("0x{}", hex::encode(rand::random::<[u8;32]>()));
     let h2 = if chain=="SOLANA" { format!("Sol{}", &hash[2..18]) } else { hash.clone() };
     let row = sqlx::query!(r#"INSERT INTO crypto_transfers (user_id, chain_type, token, amount, recipient_address, tx_hash) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id"#, user_id, chain, token, amount, to, h2.clone()).fetch_one(pool).await?;
-    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, blockchain_tx_hash, status, metadata) VALUES ($1,'CRYPTO_TRANSFER','OUTBOUND',$2,$3,$4,'SUCCESS', jsonb_build_object('chain',$5::text))"#, user_id, amount, token, h2.clone(), chain).execute(pool).await?;
-    Ok((row.id, h2))
+    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, fee_amount, blockchain_tx_hash, status, metadata) VALUES ($1,'CRYPTO_TRANSFER','OUTBOUND',$2,$3,$4,$5,'SUCCESS', jsonb_build_object('chain',$6::text,'platform_fee',$7::text,'gas','~0.0005 SOL'))"#, user_id, amount, token, fee, h2.clone(), chain, fee.to_string()).execute(pool).await?;
+    Ok((row.id, h2, fee))
 }
-pub async fn atomic_offramp(pool: &PgPool, user_id: Uuid, from_token: &str, to_fiat: &str, amount_token: Decimal, rate: Decimal) -> Result<Uuid, DbError> {
+pub async fn atomic_offramp(pool: &PgPool, user_id: Uuid, from_token: &str, to_fiat: &str, amount_token: Decimal, rate: Decimal) -> Result<(Uuid,Decimal), DbError> {
     let fiat_amount = (amount_token * rate).round_dp(2);
-    // debit token wallet (mock: just ledger), credit NGN
-    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, status, metadata) VALUES ($1,'OFFRAMP','OUTBOUND',$2,$3,'SUCCESS', jsonb_build_object('to_fiat',$4::text,'rate',$5::text))"#, user_id, amount_token, from_token, to_fiat, rate.to_string()).execute(pool).await?;
+    let is_fiat_to_crypto = from_token.to_uppercase()=="NGN";
+    let fee_type = if is_fiat_to_crypto { "ONRAMP" } else { "OFFRAMP" };
+    let fee = platform_fee_for(pool, fee_type, fiat_amount).await?;
+    let net_fiat = fiat_amount - fee;
+    sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, fee_amount, status, metadata) VALUES ($1,$2,'OUTBOUND',$3,$4,$5,'SUCCESS', jsonb_build_object('to_fiat',$6::text,'rate',$7::text,'fee',$8::text))"#, user_id, fee_type, amount_token, from_token, fee, to_fiat, rate.to_string(), fee.to_string()).execute(pool).await?;
     sqlx::query!(r#"INSERT INTO wallets (user_id, wallet_type, currency, balance) VALUES ($1,'FIAT_NGN','NGN',0) ON CONFLICT (user_id,currency) DO NOTHING"#, user_id).execute(pool).await?;
-    sqlx::query!(r#"UPDATE wallets SET balance = balance + $1 WHERE user_id=$2 AND currency='NGN'"#, fiat_amount, user_id).execute(pool).await?;
-    let tx = sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, status, metadata) VALUES ($1,'OFFRAMP_CREDIT','INBOUND',$2,'NGN','SUCCESS', jsonb_build_object('from',$3::text)) RETURNING id"#, user_id, fiat_amount, from_token).fetch_one(pool).await?;
-    Ok(tx.id)
+    sqlx::query!(r#"UPDATE wallets SET balance = balance + $1 WHERE user_id=$2 AND currency='NGN'"#, net_fiat, user_id).execute(pool).await?;
+    let tx = sqlx::query!(r#"INSERT INTO transactions (user_id, tx_type, direction, amount, currency, fee_amount, status, metadata) VALUES ($1,$2,'INBOUND',$3,'NGN',$4,'SUCCESS', jsonb_build_object('from',$5::text,'fee',$6::text)) RETURNING id"#, user_id, fee_type, net_fiat, fee, from_token, fee.to_string()).fetch_one(pool).await?;
+    Ok((tx.id, fee))
 }
 pub async fn get_crypto_rate(pool: &PgPool, pair: &str) -> Result<Option<Decimal>, DbError> {
     Ok(sqlx::query_scalar!(r#"SELECT mid_rate FROM fx_rates WHERE pair=$1 ORDER BY fetched_at DESC LIMIT 1"#, pair).fetch_optional(pool).await?)

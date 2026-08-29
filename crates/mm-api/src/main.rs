@@ -2,6 +2,7 @@ mod config;
 mod fsm;
 mod handlers;
 mod outbound;
+mod rates;
 mod security;
 mod state;
 mod wallet;
@@ -11,7 +12,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use handlers::admin::{bot_interactions, bot_resolve_interaction, bot_stats, create_catalogue, create_employee, dashboard, delete_catalogue, delete_employee, foreign_accounts_all, get_analytics, get_employee, get_roles, kb_search, list_employees, login, resolve_trade, track_metric, transactions_recent, update_catalogue, update_employee};
+use handlers::admin::{bot_interactions, bot_resolve_interaction, bot_stats, create_catalogue, create_employee, dashboard, delete_catalogue, delete_employee, fees_list, fees_update, foreign_accounts_all, get_analytics, get_employee, get_roles, kb_search, list_employees, login, rates_list, rates_refresh, resolve_trade, track_metric, transactions_recent, update_catalogue, update_employee};
 use state::AppState;
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::cors::{Any, CorsLayer};
@@ -36,6 +37,8 @@ async fn main() -> anyhow::Result<()> {
             worker::run(worker_state).await;
         });
     }
+    // auto rates (non-giftcard) every 60s tick, per-pair interval 300s crypto / 3600s fiat, with fallback jitter
+    rates::spawn(state.pool.clone());
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -70,6 +73,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/admin/kb", get(kb_search))
         .route("/api/v1/admin/transactions", get(transactions_recent))
         .route("/api/v1/admin/foreign-accounts", get(foreign_accounts_all))
+        .route("/api/v1/admin/fees", get(fees_list))
+        .route("/api/v1/admin/fees/:fee_type", post(fees_update))
+        .route("/api/v1/admin/rates", get(rates_list))
+        .route("/api/v1/admin/rates/refresh", post(rates_refresh))
         // Roles
         .route("/api/v1/admin/roles", get(get_roles))
         // Debug

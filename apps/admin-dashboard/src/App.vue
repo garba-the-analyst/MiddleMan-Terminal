@@ -35,6 +35,8 @@ const allNavigation: NavItem[] = [
   { name: 'Gift Card Trades', icon: '💳', category: 'Trading' },
   { name: 'Price Catalogue', icon: '🏷️', category: 'Trading' },
   { name: 'Transactions', icon: '🔁', category: 'Finance' },
+  { name: 'Fees & Charges', icon: '💰', category: 'Finance' },
+  { name: 'Rates (Auto)', icon: '📈', category: 'Finance' },
   { name: 'Foreign Accounts', icon: '🌍', category: 'Finance' },
   { name: 'Knowledge Base', icon: '📚', category: 'Support' },
   { name: 'Employee Management', icon: '👥', category: 'Super Admin', roles: ['SUPER_ADMIN'] },
@@ -53,6 +55,8 @@ const kbItems = ref<any[]>([])
 const kbSearch = ref('')
 const transactions = ref<any[]>([])
 const foreignAccts = ref<any[]>([])
+const fees = ref<any[]>([])
+const rates = ref<any[]>([])
 const employees = ref<any[]>([])
 const selectedImage = ref<string | null>(null)
 const isLive = ref(false)
@@ -92,6 +96,10 @@ async function fetchEmployees() {
 }
 async function fetchTransactions(){ if(!isAuthenticated.value) return; try{ const r=await axios.get('/api/v1/admin/transactions',{headers:authHeaders()}); transactions.value=r.data }catch{} }
 async function fetchForeign(){ if(!isAuthenticated.value) return; try{ const r=await axios.get('/api/v1/admin/foreign-accounts',{headers:authHeaders()}); foreignAccts.value=r.data }catch{} }
+async function fetchFees(){ if(!isAuthenticated.value) return; try{ const r=await axios.get('/api/v1/admin/fees',{headers:authHeaders()}); fees.value=r.data }catch{} }
+async function fetchRates(){ if(!isAuthenticated.value) return; try{ const r=await axios.get('/api/v1/admin/rates',{headers:authHeaders()}); rates.value=r.data }catch{} }
+async function refreshRates(){ if(!isAuthenticated.value) return; try{ await axios.post('/api/v1/admin/rates/refresh',{}, {headers:authHeaders()}); await fetchRates() }catch(e:any){ alert(e?.response?.data?.error||'Failed') } }
+async function saveFee(f:any){ try{ await axios.post(`/api/v1/admin/fees/${f.fee_type}`, {fixed_amount: Number(f.fixed), percent: Number(f.percent), is_active: f.active}, {headers:authHeaders()}); await fetchFees() }catch(e:any){ alert(e?.response?.data?.error||'Failed') } }
 async function fetchKB() {
   try { const r = await axios.get('/api/v1/admin/kb', { params:{ q: kbSearch.value } }); kbItems.value=r.data } catch {}
 }
@@ -100,7 +108,7 @@ async function fetchRoles(){
   try { const r = await axios.get('/api/v1/admin/roles', { headers: authHeaders() }); roles.value=r.data } catch {}
 }
 async function fetchAll(){
-  await Promise.all([fetchDashboard(), fetchBotStats(), fetchBotInteractions(), fetchEmployees(), fetchKB(), fetchRoles(), fetchTransactions(), fetchForeign()])
+  await Promise.all([fetchDashboard(), fetchBotStats(), fetchBotInteractions(), fetchEmployees(), fetchKB(), fetchRoles(), fetchTransactions(), fetchForeign(), fetchFees(), fetchRates()])
 }
 
 onMounted(async()=>{
@@ -308,6 +316,42 @@ async function resolveInteraction(id:string){
             </table>
           </div>
           <p class="text-xs text-silver-muted">Shows all: P2P, FIAT_PAYOUT (external bank), AIRTIME, CRYPTO_TRANSFER, OFFRAMP, GIFT_CARD_PAYOUT. Filter via DB <code>transactions</code>.</p>
+        </div>
+
+        <!-- Fees -->
+        <div v-if="activeTab==='Fees & Charges'" class="space-y-4">
+          <div class="bg-obsidian-card p-4 rounded-xl border">
+            <h3 class="text-sm font-semibold">Platform fees — editable (applies next transaction). Giftcard uses manual price_catalogue, not this table.</h3>
+            <p class="text-xs text-silver-muted mt-1">Fee = fixed + percent*amount. Crypto onchain adds gas (~0.0005 SOL) on top. Spot 0.8% | Futures 1% | Degen 1.5% | Offramp 1.2% | Fiat payout 50+0.5% .</p>
+          </div>
+          <div class="bg-obsidian-card border rounded-xl overflow-hidden">
+            <table class="w-full text-left text-sm"><thead class="bg-navy-dark text-silver-muted text-xs uppercase"><tr><th class="p-3">Fee Type</th><th class="p-3">Fixed</th><th class="p-3">Percent %</th><th class="p-3">Currency</th><th class="p-3">Active</th><th class="p-3"></th></tr></thead>
+              <tbody class="divide-y"><tr v-for="f in fees" :key="f.fee_type">
+                <td class="p-3 font-mono text-xs">{{ f.fee_type }}</td>
+                <td class="p-3"><input v-model="f.fixed" type="number" step="0.01" class="w-20 px-2 py-1 rounded bg-obsidian-dark border text-sm"/></td>
+                <td class="p-3"><input v-model="f.percent" type="number" step="0.01" class="w-16 px-2 py-1 rounded bg-obsidian-dark border text-sm"/></td>
+                <td class="p-3 text-xs">{{ f.currency }}</td>
+                <td class="p-3"><input type="checkbox" v-model="f.active"/></td>
+                <td class="p-3"><button @click="saveFee(f)" class="px-3 py-1 bg-emerald-600 text-white rounded text-xs">Save</button></td>
+              </tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Rates -->
+        <div v-if="activeTab==='Rates (Auto)'" class="space-y-4">
+          <div class="bg-obsidian-card p-4 rounded-xl border flex justify-between items-center">
+            <div><h3 class="text-sm font-semibold">Auto rates — non-giftcard</h3><p class="text-xs text-silver-muted">Giftcard rates stay manual via Price Catalogue. This table auto-updates: crypto 300s (coingecko), fiat 3600s (exchangerate-api/frankfurter), fallback ±2% jitter if offline. Last 8 pairs.</p></div>
+            <button @click="refreshRates" class="px-4 py-2 bg-navy border text-white rounded text-xs">↻ Refresh now</button>
+          </div>
+          <div class="bg-obsidian-card border rounded-xl overflow-hidden">
+            <table class="w-full text-left text-sm"><thead class="bg-navy-dark text-silver-muted text-xs uppercase"><tr><th class="p-3">Pair</th><th class="p-3">Source</th><th class="p-3">Mid Rate</th><th class="p-3">Last Fetched</th><th class="p-3">Auto</th><th class="p-3">Status</th></tr></thead>
+              <tbody class="divide-y"><tr v-for="r in rates" :key="r.pair">
+                <td class="p-3 font-mono">{{ r.pair }}</td><td class="p-3 text-xs">{{ r.source }}</td><td class="p-3 font-mono text-emerald-400">{{ r.current_mid ?? r.last_rate ?? '—' }}</td><td class="p-3 text-xs">{{ r.current_fetched ?? r.last_fetched ?? '—' }}</td><td class="p-3">{{ r.auto ? 'ON' : 'OFF' }}</td><td class="p-3 text-xs" :class="r.last_error ? 'text-red-400' : 'text-emerald-400'">{{ r.last_error || 'OK' }}</td>
+              </tr></tbody>
+            </table>
+          </div>
+          <p class="text-xs text-silver-muted">Dashboard polls every 5s; rates tick every 60s in backend <code>rates::spawn</code>. Manual giftcard KYC: see Price Catalogue.</p>
         </div>
 
         <!-- Foreign Accounts -->

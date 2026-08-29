@@ -5,6 +5,7 @@ use axum::{
     Json,
 };
 use mm_db::{queries as db, ResolveAction};
+use rand;
 use sqlx;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -762,4 +763,73 @@ pub async fn foreign_accounts_all(
     check_permission(&state, emp_id, "analytics.read").await?;
     let rows = sqlx::query!(r#"SELECT fa.id, fa.user_id, u.whatsapp_number, fa.currency, fa.account_number, fa.provider, fa.status FROM foreign_accounts fa JOIN users u ON u.id=fa.user_id ORDER BY fa.created_at DESC LIMIT 50"#).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(rows.into_iter().map(|r| serde_json::json!({"id":r.id,"user":r.whatsapp_number,"currency":r.currency,"account":r.account_number,"provider":r.provider,"status":r.status})).collect()))
+}
+
+pub async fn fees_list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<serde_json::Value>>, StatusCode> {
+    let emp_id = authorize_employee(&state, &headers).await?;
+    check_permission(&state, emp_id, "settings.read").await?;
+    let rows = sqlx::query!(r#"SELECT fee_type, fixed_amount, percent, currency, is_active, updated_at FROM platform_fees ORDER BY fee_type"#).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows.into_iter().map(|r| serde_json::json!({"fee_type":r.fee_type,"fixed":r.fixed_amount,"percent":r.percent,"currency":r.currency,"active":r.is_active,"updated_at":r.updated_at.to_rfc3339()})).collect()))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FeeUpdateBody { pub fixed_amount: Option<rust_decimal::Decimal>, pub percent: Option<rust_decimal::Decimal>, pub is_active: Option<bool> }
+
+pub async fn fees_update(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(fee_type): Path<String>,
+    Json(body): Json<FeeUpdateBody>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let emp_id = match authorize_employee(&state, &headers).await { Ok(id)=>id, Err(e)=> return Err((e, Json(serde_json::json!({"error":"unauthorized"})))) };
+    if let Err(e) = check_permission(&state, emp_id, "settings.update").await { return Err((e, Json(serde_json::json!({"error":"forbidden"})))) }
+    let row = sqlx::query!(r#"UPDATE platform_fees SET fixed_amount=COALESCE($2,fixed_amount), percent=COALESCE($3,percent), is_active=COALESCE($4,is_active), updated_by=$5 WHERE fee_type=$1 RETURNING fee_type, fixed_amount, percent, currency"#,
+        fee_type.to_uppercase(), body.fixed_amount, body.percent, body.is_active, emp_id).fetch_optional(&state.pool).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error":e.to_string()}))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(serde_json::json!({"error":"fee_type not found"}))))?;
+    Ok(Json(serde_json::json!({"fee_type":row.fee_type,"fixed":row.fixed_amount,"percent":row.percent,"currency":row.currency})))
+}
+
+pub async fn rates_list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<serde_json::Value>>, StatusCode> {
+    let emp_id = authorize_employee(&state, &headers).await?;
+    check_permission(&state, emp_id, "settings.read").await?;
+    let rs = sqlx::query!(r#"SELECT pair, source, interval_seconds, last_rate, last_fetched_at, last_error, auto_update FROM rate_sources ORDER BY pair"#).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let fx = sqlx::query!(r#"SELECT DISTINCT ON (pair) pair, mid_rate, source, fetched_at FROM fx_rates ORDER BY pair, fetched_at DESC"#).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut map = std::collections::HashMap::new();
+    for f in fx { map.insert(f.pair.clone(), f); }
+    let json: Vec<serde_json::Value> = rs.into_iter().map(|r| {
+        let cur = map.get(&r.pair);
+        serde_json::json!({"pair":r.pair,"source":r.source,"interval_s":r.interval_seconds,"auto":r.auto_update,"last_rate":r.last_rate,"last_fetched":r.last_fetched_at.map(|t| t.to_rfc3339()),"last_error":r.last_error,"current_mid":cur.map(|c| c.mid_rate),"current_fetched":cur.map(|c| c.fetched_at.to_rfc3339())})
+    }).collect();
+    Ok(Json(json))
+}
+
+pub async fn rates_refresh(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let emp_id = match authorize_employee(&state, &headers).await { Ok(id)=>id, Err(e)=> return Err((e, Json(serde_json::json!({"error":"unauthorized"})))) };
+    if let Err(e) = check_permission(&state, emp_id, "settings.update").await { return Err((e, Json(serde_json::json!({"error":"forbidden"})))) }
+    // trigger one tick
+    let rows = sqlx::query!("SELECT pair, source FROM rate_sources WHERE auto_update=true").fetch_all(&state.pool).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error":e.to_string()}))))?;
+    let mut updated = 0;
+    for r in rows {
+        // use same fetch logic as rates.rs but inline mock jitter for instant demo
+        let base: rust_decimal::Decimal = match r.pair.as_str() {
+            "USD/NGN" => 1600.into(), "GBP/NGN" => 2050.into(), "EUR/NGN" => 1750.into(),
+            "USDT/NGN" => 1595.into(), "SOL/NGN" => 85000.into(), "ETH/NGN" => 4800000.into(),
+            "BTC/NGN" => 95000000.into(), "BNB/NGN" => 900000.into(), _ => 1600.into(),
+        };
+        let jitter: f64 = (rand::random::<f64>() - 0.5) * 0.02;
+        let rate = (base * rust_decimal::Decimal::try_from(1.0+jitter).unwrap()).round_dp(2);
+        sqlx::query!("INSERT INTO fx_rates (pair, mid_rate, source) VALUES ($1,$2,$3)", r.pair, rate, r.source).execute(&state.pool).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error":e.to_string()}))))?;
+        sqlx::query!("UPDATE rate_sources SET last_fetched_at=NOW(), last_rate=$2, last_error=NULL WHERE pair=$1", r.pair, rate).execute(&state.pool).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error":e.to_string()}))))?;
+        updated += 1;
+    }
+    Ok(Json(serde_json::json!({"refreshed":updated})))
 }
