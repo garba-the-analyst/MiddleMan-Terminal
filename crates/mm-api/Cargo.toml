@@ -31,4 +31,7 @@ bs58 = { workspace = true }
 hex = { workspace = true }
 regex = { workspace = true }
 
+[features]
+tls = ["redis/tls-rustls"]
+
 [dev-dependencies]

@@ -7,7 +7,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY .sqlx ./.sqlx
 COPY crates ./crates
 COPY migrations ./migrations
-RUN cargo build --release -p mm-api
+RUN cargo build --release -p mm-api --features tls
 
 FROM node:20-bookworm AS node-builder
 WORKDIR /app/apps/wa-bridge
