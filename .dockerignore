@@ -1,0 +1,13 @@
+target
+node_modules
+apps/*/node_modules
+apps/*/dist
+.git
+.gitignore
+.env
+auth_info_baileys
+.env.example
+README.md
+dist
+tmp
+*.log
