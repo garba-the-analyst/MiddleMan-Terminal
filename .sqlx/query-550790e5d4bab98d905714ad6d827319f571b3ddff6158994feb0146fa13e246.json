@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO transactions (user_id, tx_type, direction, amount, currency, fee_amount, status, metadata) VALUES ($1,$2,'INBOUND',$3,'NGN',$4,'SUCCESS', jsonb_build_object('from',$5::text,'fee',$6::text)) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Numeric",
+        "Numeric",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "550790e5d4bab98d905714ad6d827319f571b3ddff6158994feb0146fa13e246"
+}

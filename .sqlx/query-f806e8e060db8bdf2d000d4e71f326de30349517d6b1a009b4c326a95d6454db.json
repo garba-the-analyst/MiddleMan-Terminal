@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET failed_pin_attempts = failed_pin_attempts+1, pin_locked_until = CASE WHEN failed_pin_attempts+1 >= 5 THEN NOW() + interval '15 minutes' WHEN failed_pin_attempts+1 >= 3 THEN NOW() + interval '2 minutes' ELSE pin_locked_until END WHERE id=$1 RETURNING failed_pin_attempts, pin_locked_until",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "failed_pin_attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "pin_locked_until",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "f806e8e060db8bdf2d000d4e71f326de30349517d6b1a009b4c326a95d6454db"
+}

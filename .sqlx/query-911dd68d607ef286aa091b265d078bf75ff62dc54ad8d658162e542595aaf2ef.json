@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE rate_sources SET last_error=$2 WHERE pair=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "911dd68d607ef286aa091b265d078bf75ff62dc54ad8d658162e542595aaf2ef"
+}

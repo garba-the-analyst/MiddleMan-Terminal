@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pair, source FROM rate_sources WHERE auto_update=true",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pair",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "source",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "5ebe8d2fa2fbf092b68c4eb63f38d1d2fae31acde896e1eec35116fd4847cb1b"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO otp_codes (whatsapp_number, code, expires_at) VALUES ($1,$2,NOW()+interval '2 minutes')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "830eb528189911a302e80ff60336b602a207d0a14ba5d3023c58aa0c39c80c06"
+}

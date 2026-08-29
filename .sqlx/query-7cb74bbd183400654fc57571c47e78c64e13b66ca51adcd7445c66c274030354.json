@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT to_char(date, 'YYYY-MM-DD') as d, metric_value FROM bot_analytics WHERE metric_name='messages_inbound' ORDER BY date ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "d",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "metric_value",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      false
+    ]
+  },
+  "hash": "7cb74bbd183400654fc57571c47e78c64e13b66ca51adcd7445c66c274030354"
+}

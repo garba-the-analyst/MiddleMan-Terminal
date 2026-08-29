@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT intent, COUNT(*) as c FROM bot_interactions GROUP BY intent ORDER BY c DESC LIMIT 8",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "intent",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "c",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "487b7a3284e8c50730f6dd97b70d47074195fb71549d6e1678f914124eb4700f"
+}

@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT fee_type, fixed_amount, percent, currency, is_active, updated_at FROM platform_fees ORDER BY fee_type",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fee_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "fixed_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "percent",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "currency",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_active",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "72421e436dfbc6c78ab3b0910d2cf159d31ac28559fe6bd2a6251c14a78ccc58"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO processed_messages (message_id) VALUES ($1)\n           ON CONFLICT DO NOTHING RETURNING message_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "message_id",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "419afd9d19d1b00cdf5e07e998e5b1501d36d8d75c8293fef38b15baedb15449"
+}

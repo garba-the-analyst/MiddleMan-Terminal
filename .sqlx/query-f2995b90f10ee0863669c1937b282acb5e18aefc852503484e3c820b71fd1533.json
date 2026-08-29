@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO admin_audit_logs (employee_id, action, target_entity, target_id)\n               VALUES ($1,$2,'gift_card_trades',$3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f2995b90f10ee0863669c1937b282acb5e18aefc852503484e3c820b71fd1533"
+}

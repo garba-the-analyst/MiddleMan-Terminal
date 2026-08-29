@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT SUM(amount) FROM transactions WHERE user_id=$1 AND currency='NGN' AND created_at >= CURRENT_DATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sum",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "bf37f6791ab9a9cfacba958fad2c1d6260edf9c37f3ce819fac82a5167087653"
+}

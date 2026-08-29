@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT AVG(handling_ms) FROM bot_interactions",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "avg",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "774a20c8c73adc03fa9da2649b305ff17c8132416278ddef77a3ceb90eb84d9c"
+}

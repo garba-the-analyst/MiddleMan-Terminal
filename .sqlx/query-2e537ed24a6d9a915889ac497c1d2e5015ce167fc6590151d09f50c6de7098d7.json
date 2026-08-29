@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (pair) pair, mid_rate, source, fetched_at FROM fx_rates ORDER BY pair, fetched_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pair",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "mid_rate",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "source",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "fetched_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2e537ed24a6d9a915889ac497c1d2e5015ce167fc6590151d09f50c6de7098d7"
+}

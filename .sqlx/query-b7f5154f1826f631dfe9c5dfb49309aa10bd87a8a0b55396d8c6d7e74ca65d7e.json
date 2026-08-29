@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT category, COUNT(*) as c FROM bot_interactions GROUP BY category ORDER BY c DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "category",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "c",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "b7f5154f1826f631dfe9c5dfb49309aa10bd87a8a0b55396d8c6d7e74ca65d7e"
+}

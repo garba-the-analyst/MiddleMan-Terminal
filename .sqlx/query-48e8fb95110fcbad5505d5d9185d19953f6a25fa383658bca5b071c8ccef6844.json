@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT calc_platform_fee($1,$2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "calc_platform_fee",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "48e8fb95110fcbad5505d5d9185d19953f6a25fa383658bca5b071c8ccef6844"
+}

@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE platform_fees SET fixed_amount=COALESCE($2,fixed_amount), percent=COALESCE($3,percent), is_active=COALESCE($4,is_active), updated_by=$5 WHERE fee_type=$1 RETURNING fee_type, fixed_amount, percent, currency",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fee_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "fixed_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "percent",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "currency",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Numeric",
+        "Numeric",
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0a464b250f59fa0b79f938eae18a64411ba6938ec66a3e523c7f2a533f261368"
+}

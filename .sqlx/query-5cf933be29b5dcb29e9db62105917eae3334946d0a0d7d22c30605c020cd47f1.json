@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT fa.id, fa.user_id, u.whatsapp_number, fa.currency, fa.account_number, fa.provider, fa.status FROM foreign_accounts fa JOIN users u ON u.id=fa.user_id ORDER BY fa.created_at DESC LIMIT 50",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "whatsapp_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "currency",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "account_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "provider",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "status",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5cf933be29b5dcb29e9db62105917eae3334946d0a0d7d22c30605c020cd47f1"
+}

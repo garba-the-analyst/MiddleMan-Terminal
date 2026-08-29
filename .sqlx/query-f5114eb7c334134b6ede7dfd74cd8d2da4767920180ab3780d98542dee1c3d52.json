@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO bot_analytics (metric_name, metric_value, metadata)\n           VALUES ($1, $2, $3)\n           ON CONFLICT (date, metric_name) DO UPDATE SET\n               metric_value = bot_analytics.metric_value + EXCLUDED.metric_value,\n               metadata = EXCLUDED.metadata",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int8",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5114eb7c334134b6ede7dfd74cd8d2da4767920180ab3780d98542dee1c3d52"
+}

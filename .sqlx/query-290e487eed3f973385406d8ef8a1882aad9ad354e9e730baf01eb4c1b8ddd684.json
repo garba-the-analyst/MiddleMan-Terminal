@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO wallets (user_id, wallet_type, currency, balance)\n                   VALUES ($1, 'FIAT_NGN', 'NGN', 0)\n                   ON CONFLICT (user_id, currency) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "290e487eed3f973385406d8ef8a1882aad9ad354e9e730baf01eb4c1b8ddd684"
+}

@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO key_vaults (user_id, chain_type, public_address, encrypted_private_key, nonce)\n           VALUES ($1, $2, $3, $4, 'v1')\n           ON CONFLICT (user_id, chain_type) DO NOTHING\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6f605f2e5dc3269e6e4daca42987110c2c8448ef310d45972b1dcc53e317643c"
+}

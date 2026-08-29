@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO foreign_accounts (user_id, currency, account_number) VALUES ($1,$2,$3) ON CONFLICT (user_id,currency) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9bc1d723b6209d789e7776e6b748286d7b63fadd131e5478edc62eb2af956c04"
+}

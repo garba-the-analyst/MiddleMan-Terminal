@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO transactions (user_id, tx_type, direction, amount, currency, fee_amount, status, metadata) VALUES ($1,'FIAT_PAYOUT','OUTBOUND',$2,'NGN',$3,'SUCCESS', jsonb_build_object('bank_code',$4::text,'account',$5::text,'fee',$6::text))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Numeric",
+        "Numeric",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3dc0409f371a18b38ea69486c508fca177a93ca9328905ebdaa7444165bf7e7a"
+}

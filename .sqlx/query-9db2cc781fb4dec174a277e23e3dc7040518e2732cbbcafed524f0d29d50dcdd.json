@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT rate_per_dollar FROM price_catalogue\n           WHERE brand ILIKE $1 AND country = $2 AND card_format = $3 AND active = TRUE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rate_per_dollar",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9db2cc781fb4dec174a277e23e3dc7040518e2732cbbcafed524f0d29d50dcdd"
+}

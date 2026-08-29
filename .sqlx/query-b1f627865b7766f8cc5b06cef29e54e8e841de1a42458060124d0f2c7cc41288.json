@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COUNT(*) as \"c!\" FROM transactions WHERE user_id=$1 AND created_at > NOW() - interval '1 hour'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "c!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b1f627865b7766f8cc5b06cef29e54e8e841de1a42458060124d0f2c7cc41288"
+}

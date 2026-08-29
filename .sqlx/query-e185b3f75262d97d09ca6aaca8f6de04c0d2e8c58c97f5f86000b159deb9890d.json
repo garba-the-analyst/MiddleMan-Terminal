@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, date, metric_name, metric_value, metadata\n                   FROM bot_analytics WHERE date <= $1\n                   ORDER BY date DESC, metric_name ASC LIMIT 1000",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 2,
+        "name": "metric_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "metric_value",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "e185b3f75262d97d09ca6aaca8f6de04c0d2e8c58c97f5f86000b159deb9890d"
+}

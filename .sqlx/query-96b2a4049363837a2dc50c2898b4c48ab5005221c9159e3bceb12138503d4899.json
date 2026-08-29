@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE gift_card_trades\n                   SET status = 'APPROVED',\n                       reviewed_by_employee_id = COALESCE($2, reviewed_by_employee_id),\n                       final_ngn_payout = COALESCE($3, final_ngn_payout),\n                       updated_at = NOW()\n                   WHERE id = $1 AND status = 'PENDING'\n                   RETURNING id AS trade_id, user_id, final_ngn_payout AS payout,\n                             card_brand AS brand, claimed_usd_amount AS usd_amount",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "trade_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "payout",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "brand",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "usd_amount",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "96b2a4049363837a2dc50c2898b4c48ab5005221c9159e3bceb12138503d4899"
+}

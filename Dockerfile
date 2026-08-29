@@ -1,8 +1,10 @@
 # MiddleMan — Fly.io single-image (mm-api + wa-bridge)
 FROM rust:bookworm AS rust-builder
 WORKDIR /app
+ENV SQLX_OFFLINE=true
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY Cargo.toml Cargo.lock ./
+COPY .sqlx ./.sqlx
 COPY crates ./crates
 COPY migrations ./migrations
 RUN cargo build --release -p mm-api

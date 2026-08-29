@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT sentiment, COUNT(*) as c FROM bot_interactions GROUP BY sentiment",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sentiment",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "c",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "95663b306f200ea5e67905e907b8d41b8da6c2ba6199472ac8b35fc1a84e69bf"
+}

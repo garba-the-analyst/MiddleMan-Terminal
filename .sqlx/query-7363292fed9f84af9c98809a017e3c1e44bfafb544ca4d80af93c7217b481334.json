@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO active_positions (user_id, protocol, market_pair, side, leverage, margin_usd, entry_price, liquidation_price, status) VALUES ($1,'raydium',$2,'LONG',5,$3,100,90,'OPEN') RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7363292fed9f84af9c98809a017e3c1e44bfafb544ca4d80af93c7217b481334"
+}

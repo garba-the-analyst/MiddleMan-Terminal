@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO crypto_transfers (user_id, chain_type, token, amount, recipient_address, tx_hash) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar",
+        "Numeric",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e6fad7d5b65624433cad9d622a069d15f925be72751cf3da33b9d0ae8c47edd2"
+}

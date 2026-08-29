@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pair, source, interval_seconds, last_fetched_at FROM rate_sources WHERE auto_update=true AND is_giftcard=false",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pair",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "source",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "interval_seconds",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_fetched_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "99906dbdef93f7b4137d3b0e549f5caf7df90176f580966bcd26aad2ec22193d"
+}

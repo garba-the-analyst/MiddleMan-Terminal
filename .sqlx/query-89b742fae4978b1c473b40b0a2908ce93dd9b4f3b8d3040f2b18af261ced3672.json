@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO transactions (id, user_id, tx_type, direction, amount, currency, fee_amount, recipient_identifier, status, metadata)\n           VALUES ($1, $2, 'P2P_TRANSFER', 'OUTBOUND', $3, 'NGN', $4, $5, 'SUCCESS', jsonb_build_object('counterpart', $6::text))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Numeric",
+        "Numeric",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "89b742fae4978b1c473b40b0a2908ce93dd9b4f3b8d3040f2b18af261ced3672"
+}

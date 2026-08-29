@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO price_catalogue_audit (catalogue_id, employee_id, action, old_values, new_values)\n               VALUES ($1, $2, 'UPDATE', $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Uuid",
+        "Jsonb",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b21b540a0a23b6c09119fb00fb9ce2c525c62067b6853de0059228a55a2d0e68"
+}

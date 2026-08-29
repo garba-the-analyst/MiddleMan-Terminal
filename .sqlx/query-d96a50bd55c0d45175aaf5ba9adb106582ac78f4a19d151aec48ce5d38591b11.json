@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE wallets SET balance = balance - $1 WHERE user_id=$2 AND currency='NGN'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Numeric",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d96a50bd55c0d45175aaf5ba9adb106582ac78f4a19d151aec48ce5d38591b11"
+}

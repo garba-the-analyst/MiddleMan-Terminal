@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET failed_pin_attempts=0, pin_locked_until=NULL WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "569e7a75f2deb09fea6d390758d305c3b59c4bc9f89d955f327b6217accc322e"
+}

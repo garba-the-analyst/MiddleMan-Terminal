@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET pin_hash=$2, pin_set=true, updated_at=NOW() WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e4a2f4c368125dbcb2b4efd8c6194e780db17269863076e986f2ea49c1d2d3d6"
+}
